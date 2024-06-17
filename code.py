@@ -75,59 +75,59 @@ def main():
         ])
         st.markdown(get_table_download_link(keyword_template_df, "keyword_template.csv"), unsafe_allow_html=True)
 
-    # Allow users to upload their own CSV file
-    uploaded_file = st.file_uploader("Upload your Equity Analysis CSV file", type="csv")
+    # Allow users to upload their keyword CSV file first
     uploaded_keyword_file = st.file_uploader("Upload your Keyword CSV file", type="csv")
+    uploaded_file = st.file_uploader("Upload your Equity Analysis CSV file", type="csv")
+
+    # Column selection before running the analysis
+    weights_mapping = {
+        "Inlinks": 4,
+        "backlinks": 7,
+        "referring_domains_score": 10,
+        "trust_flow_score": 8,
+        "citation_flow_score": 4,
+        "gsc_clicks_score": 14,
+        "gsc_impressions_score": 8,
+        "unique_pageviews_organic_score": 6,
+        "unique_pageviews_all_traffic_score": 6,
+        "completed_goals_all_traffic_score": 6,
+        "number_of_keywords_page_1_score": 10,
+        "number_of_keywords_page_2_score": 8,
+        "number_of_keywords_page_3_score": 6,
+        "total_search_volume_score": 5
+    }
+
+    columns_to_use = st.multiselect(
+        "Select columns to use in analysis (unselected columns will be omitted):",
+        options=list(weights_mapping.keys()),
+        default=list(weights_mapping.keys())
+    )
+
+    if uploaded_keyword_file is not None:
+        keyword_data_df = pd.read_csv(uploaded_keyword_file)
+        required_keyword_columns = ["URL", "Keywords", "Search Volume", "Ranking Position"]
+        if all(col in keyword_data_df.columns for col in required_keyword_columns):
+            keyword_summary_df = keyword_data_df.groupby("URL").agg({
+                "Search Volume": "sum",
+                "Ranking Position": lambda x: {
+                    "Page 1": (x <= 10).sum(),
+                    "Page 2": ((x > 10) & (x <= 20)).sum(),
+                    "Page 3": ((x > 20) & (x <= 30)).sum()
+                }
+            }).reset_index()
+
+            # Normalize the keyword summary data to correct column structure
+            keyword_summary_df = pd.DataFrame(keyword_summary_df.to_dict()['Ranking Position'].tolist(), index=keyword_summary_df['URL']).reset_index()
+            keyword_summary_df.columns = ["URL", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
+            keyword_summary_df["total_search_volume_score"] = keyword_data_df.groupby("URL")["Search Volume"].sum().values
 
     if uploaded_file is not None:
         equity_data_df = pd.read_csv(uploaded_file)
 
-        # If keyword file is provided, merge it with the equity data first
         if uploaded_keyword_file is not None:
-            keyword_data_df = pd.read_csv(uploaded_keyword_file)
-            required_keyword_columns = ["URL", "Keywords", "Search Volume", "Ranking Position"]
-            if all(col in keyword_data_df.columns for col in required_keyword_columns):
-                keyword_summary_df = keyword_data_df.groupby("URL").agg({
-                    "Search Volume": "sum",
-                    "Ranking Position": lambda x: {
-                        "Page 1": (x <= 10).sum(),
-                        "Page 2": ((x > 10) & (x <= 20)).sum(),
-                        "Page 3": ((x > 20) & (x <= 30)).sum()
-                    }
-                }).reset_index()
+            # Merge keyword summary data with equity data
+            equity_data_df = equity_data_df.merge(keyword_summary_df, on="URL", how="left")
 
-                # Normalize the keyword summary data to correct column structure
-                keyword_summary_df = pd.DataFrame(keyword_summary_df.to_dict()['Ranking Position'].tolist(), index=keyword_summary_df['URL']).reset_index()
-                keyword_summary_df.columns = ["URL", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
-                keyword_summary_df["total_search_volume_score"] = keyword_data_df.groupby("URL")["Search Volume"].sum().values
-
-                equity_data_df = equity_data_df.merge(keyword_summary_df, on="URL", how="left")
-
-                # Correct data formatting for keyword columns
-                for col in ["total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]:
-                    equity_data_df[col] = equity_data_df[col].apply(convert_to_numeric)
-
-        # Adjusted weights mapping based on the dataset's columns -- add up to 100 points
-        weights_mapping = {
-            "Inlinks": 4,
-            "backlinks": 7,
-            "referring_domains_score": 10,
-            "trust_flow_score": 8,
-            "citation_flow_score": 4,
-            "gsc_clicks_score": 14,
-            "gsc_impressions_score": 8,
-            "unique_pageviews_organic_score": 6,
-            "unique_pageviews_all_traffic_score": 6,
-            "completed_goals_all_traffic_score": 6
-        }
-
-        # Option to omit missing columns from weighting
-        columns_to_use = st.multiselect(
-            "Select columns to use in analysis (unselected columns will be omitted):",
-            options=list(weights_mapping.keys()),
-            default=list(weights_mapping.keys())
-        )
-        
         # Correct data formatting for columns with numeric values
         columns_to_correct = [
             "total_search_volume_score",
