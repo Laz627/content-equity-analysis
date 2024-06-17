@@ -113,6 +113,8 @@ def main():
                 break
             except UnicodeDecodeError:
                 continue
+        
+        st.write("Columns in uploaded keyword file:", keyword_data_df.columns)
 
         required_keyword_columns = ["URL", "Keywords", "Search Volume", "Ranking Position"]
         if all(col in keyword_data_df.columns for col in required_keyword_columns):
