@@ -186,7 +186,7 @@ def main():
         st.markdown(get_table_download_link(result_df, "equity_analysis_results.csv"), unsafe_allow_html=True)
 
     if uploaded_keyword_file is not None and uploaded_file is None:
-        st.error("Please upload the Equity Analysis CSV file first.")
+        st.error("Please remove any unncessary columns and then upload the Equity Analysis CSV file to begin running the script.")
 
 if __name__ == "__main__":
     main()
