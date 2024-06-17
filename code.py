@@ -92,11 +92,11 @@ def main():
             keyword_template_df.to_excel(writer, sheet_name='Keyword Data', index=False)
         st.markdown(get_excel_download_link(output, "equity_analysis_template.xlsx"), unsafe_allow_html=True)
 
-       columns_to_use = st.multiselect(
-            "Select columns to use in analysis (unselected columns will be omitted):",
-            options=list(weights_mapping.keys()),
-            default=list(weights_mapping.keys())
-        )
+columns_to_use = st.multiselect(
+    "Select columns to use in analysis (unselected columns will be omitted):",
+    options=list(weights_mapping.keys()),
+    default=list(weights_mapping.keys())
+    )
     
     uploaded_file = st.file_uploader("Upload your XLSX file", type="xlsx")
 
