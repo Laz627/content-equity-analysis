@@ -184,7 +184,7 @@ def main():
         
         # Remove weighted score columns from the export
         export_columns = [col for col in equity_data_df.columns if not col.endswith('_Weighted') and col != "Final_Weighted_Score"]
-                result_df = equity_data_df[export_columns]
+        result_df = equity_data_df[export_columns]
 
         # Show the results
         st.write(result_df)
