@@ -110,18 +110,11 @@ def main():
         required_keyword_columns = ["URL", "Keywords", "Search Volume", "Ranking Position"]
         if all(col in keyword_data_df.columns for col in required_keyword_columns):
             keyword_summary_df = keyword_data_df.groupby("URL").agg({
-                "Search Volume": "sum",
-                "Ranking Position": lambda x: {
-                    "Page 1": (x <= 10).sum(),
-                    "Page 2": ((x > 10) & (x <= 20)).sum(),
-                    "Page 3": ((x > 20) & (x <= 30)).sum()
-                }
+                "total_search_volume_score": ("Search Volume", "sum"),
+                "number_of_keywords_page_1_score": (lambda x: (x["Ranking Position"] <= 10).sum()),
+                "number_of_keywords_page_2_score": (lambda x: ((x["Ranking Position"] > 10) & (x["Ranking Position"] <= 20)).sum()),
+                "number_of_keywords_page_3_score": (lambda x: ((x["Ranking Position"] > 20) & (x["Ranking Position"] <= 30)).sum())
             }).reset_index()
-
-            # Normalize the keyword summary data to correct column structure
-            keyword_summary_df = pd.DataFrame(keyword_summary_df.to_dict()['Ranking Position'].tolist(), index=keyword_summary_df['URL']).reset_index()
-            keyword_summary_df.columns = ["URL", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
-            keyword_summary_df["total_search_volume_score"] = keyword_data_df.groupby("URL")["Search Volume"].sum().values
         else:
             st.error("Keyword file is missing required columns: 'URL', 'Keywords', 'Search Volume', 'Ranking Position'")
 
