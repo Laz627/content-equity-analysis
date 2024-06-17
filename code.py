@@ -118,7 +118,7 @@ def main():
 
         # Fill N/A values with 0 in both dataframes
         equity_data_df = equity_data_df.fillna(0)
-        keyword_data_df = keyword_data_df.fillna(0)
+        keyword_data_df = keyword_data_df.fillna(0)  # Ensures no NaNs messing up summary calculations
 
         # Ensure 'citation_flow_score' has no zero values to avoid division errors
         equity_data_df['citation_flow_score'] = np.where(equity_data_df['citation_flow_score'] == 0, 0.01, equity_data_df['citation_flow_score'])
@@ -205,6 +205,9 @@ def main():
 
         export_columns = [col for col in equity_data_df.columns if col not in ("Final_Weighted_Score",)]
         result_df = equity_data_df[export_columns]
+
+        # Ensure no blank cells by filling result_df with 0s where necessary
+        result_df = result_df.fillna(0)
 
         st.write(result_df)
 
