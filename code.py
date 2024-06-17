@@ -13,15 +13,17 @@ except ImportError:
 
 @st.cache_data
 def convert_to_numeric(value):
+    """Converts a value to numeric format after replacing commas."""
     try:
         return float(str(value).replace(',', ''))
     except ValueError:
         return value
 
 def classify_score(score, high_thresh, med_thresh):
-    if score > 0 and score >= high_thresh:
+    """Classify the score into High, Medium, Low, or No value based on thresholds."""
+    if score > high_thresh:
         return "High"
-    elif score > 0 and score >= med_thresh:
+    elif score > med_thresh:
         return "Medium"
     elif score > 0:
         return "Low"
@@ -29,12 +31,14 @@ def classify_score(score, high_thresh, med_thresh):
         return "No value"
 
 def get_excel_download_link(output, filename):
+    """Generates a link to download the DataFrame as an Excel file."""
     output.seek(0)
     b64 = base64.b64encode(output.read()).decode()
     href = f'<a href="data:application/octet-stream;base64,{b64}" download="{filename}">Download Excel file</a>'
     return href
 
 def normalize(df, metric_cols):
+    """Normalize the specified columns in the DataFrame using Min-Max normalization."""
     df_normalized = df.copy()
     for col in metric_cols:
         if col in df.columns:
@@ -45,6 +49,16 @@ def normalize(df, metric_cols):
             else:
                 df_normalized[col] = 0
     return df_normalized
+
+def check_zero_rows(df, metric_cols):
+    """Check which rows are entirely zero for specified columns."""
+    mask = (df[metric_cols] == 0).all(axis=1)
+    return df[mask]
+
+def check_non_zero_rows(df, metric_cols):
+    """Check which rows have non-zero values for specified columns."""
+    mask = (df[metric_cols] > 0).any(axis=1)
+    return df[mask]
 
 def main():
     st.title("Equity Analysis Calculator")
@@ -116,9 +130,11 @@ def main():
         equity_data_df.columns = [col.strip().lower().replace(' ', '_') for col in equity_data_df.columns]
         keyword_data_df.columns = [col.strip().lower().replace(' ', '_') for col in keyword_data_df.columns]
 
+        # Fill N/A values with 0 in both dataframes
         equity_data_df = equity_data_df.fillna(0)
         keyword_data_df = keyword_data_df.fillna(0)
 
+        # Ensure 'citation_flow_score' has no zero values to avoid division errors
         equity_data_df['citation_flow_score'] = np.where(equity_data_df['citation_flow_score'] == 0, 0.01, equity_data_df['citation_flow_score'])
 
         analysis_cols_to_numeric = columns_to_use + ["total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
@@ -137,6 +153,9 @@ def main():
                 number_of_keywords_page_2_score=("ranking_position", lambda x: ((x > 10) & (x <= 20)).sum()),
                 number_of_keywords_page_3_score=("ranking_position", lambda x: ((x > 20) & (x <= 30)).sum())
             ).reset_index()
+            
+            # Fill keyword_summary_df with 0 to ensure no empty values
+            keyword_summary_df = keyword_summary_df.fillna(0)
             st.write("Keyword Summary DataFrame Preview:", keyword_summary_df.head(10))
         else:
             st.error("Keyword file is missing required columns: 'URL', 'Keywords', 'Search Volume', 'Ranking Position'")
@@ -146,6 +165,9 @@ def main():
             st.write("Merged DataFrame Preview:", equity_data_df.head(10))
         else:
             st.error("'url' column is missing in one of the uploaded sheets.")
+
+        # Ensure no blank cells in equity_data_df after the merge.
+        equity_data_df = equity_data_df.fillna(0)
 
         norm_data_df = normalize(equity_data_df.copy(), columns_to_use)
 
@@ -165,6 +187,7 @@ def main():
 
         st.write("Weighted Scores Sum Preview First 10 Rows:", weighted_scores_sum.head(10))
 
+        # Trust ratio calculation handling zero citation_flow_score
         if "trust_flow_score" in columns_to_use and "citation_flow_score" in columns_to_use:
             if (norm_data_df["citation_flow_score"] != 0).all():
                 trust_ratio = (norm_data_df["trust_flow_score"] / norm_data_df["citation_flow_score"]).fillna(0) * 2
@@ -182,8 +205,14 @@ def main():
         medium_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.50)
 
         st.write(f"High Threshold: {high_threshold}, Medium Threshold: {medium_threshold}")
+        
+        # Additional debugging: Check rows with absolute zero values
+        zero_value_rows = check_zero_rows(equity_data_df, columns_to_use)
+        non_zero_value_rows = check_non_zero_rows(equity_data_df, columns_to_use)
+        
+        st.write("Rows with All Zero Values in Metric Columns:", zero_value_rows.shape[0])
+        st.write("Rows with Some Non-Zero Values in Metric Columns:", non_zero_value_rows.shape[0])
 
-        # Situating final check ensuring no values `== 0`
         equity_data_df["Recommendation"] = equity_data_df["Final_Weighted_Score"].apply(
             lambda x: classify_score(x, high_threshold, medium_threshold)
         )
