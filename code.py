@@ -19,9 +19,9 @@ def convert_to_numeric(value):
         return value
 
 def classify_score(score, high_thresh, med_thresh):
-    if score >= high_thresh:
+    if score > 0 and score >= high_thresh:
         return "High"
-    elif score >= med_thresh:
+    elif score > 0 and score >= med_thresh:
         return "Medium"
     elif score > 0:
         return "Low"
@@ -116,11 +116,9 @@ def main():
         equity_data_df.columns = [col.strip().lower().replace(' ', '_') for col in equity_data_df.columns]
         keyword_data_df.columns = [col.strip().lower().replace(' ', '_') for col in keyword_data_df.columns]
 
-        # Fill N/A values with 0 in both dataframes
         equity_data_df = equity_data_df.fillna(0)
-        keyword_data_df = keyword_data_df.fillna(0)  # Ensures no NaNs messing up summary calculations
+        keyword_data_df = keyword_data_df.fillna(0)
 
-        # Ensure 'citation_flow_score' has no zero values to avoid division errors
         equity_data_df['citation_flow_score'] = np.where(equity_data_df['citation_flow_score'] == 0, 0.01, equity_data_df['citation_flow_score'])
 
         analysis_cols_to_numeric = columns_to_use + ["total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
@@ -151,7 +149,7 @@ def main():
 
         norm_data_df = normalize(equity_data_df.copy(), columns_to_use)
 
-        st.write("Normalize Columns Stats:")
+        st.write("Normalized Columns Stats:")
         for col in columns_to_use:
             if col in norm_data_df.columns:
                 st.write(f"{col}: min={norm_data_df[col].min()}, max={norm_data_df[col].max()}, mean={norm_data_df[col].mean()}")
@@ -167,7 +165,6 @@ def main():
 
         st.write("Weighted Scores Sum Preview First 10 Rows:", weighted_scores_sum.head(10))
 
-        # Trust ratio calculation handling zero citation_flow_score
         if "trust_flow_score" in columns_to_use and "citation_flow_score" in columns_to_use:
             if (norm_data_df["citation_flow_score"] != 0).all():
                 trust_ratio = (norm_data_df["trust_flow_score"] / norm_data_df["citation_flow_score"]).fillna(0) * 2
@@ -186,7 +183,10 @@ def main():
 
         st.write(f"High Threshold: {high_threshold}, Medium Threshold: {medium_threshold}")
 
-        equity_data_df["Recommendation"] = equity_data_df["Final_Weighted_Score"].apply(lambda x: classify_score(x, high_threshold, medium_threshold))
+        # Situating final check ensuring no values `== 0`
+        equity_data_df["Recommendation"] = equity_data_df["Final_Weighted_Score"].apply(
+            lambda x: classify_score(x, high_threshold, medium_threshold)
+        )
 
         st.write("Recommendation Distribution:", equity_data_df["Recommendation"].value_counts())
 
