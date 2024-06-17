@@ -16,8 +16,7 @@ def classify_score(score, high_thresh, med_thresh):
         return "High"
     elif score >= med_thresh:
         return "Medium"
-    elif score > 0:
-        return "Low"
+    elif sco        return "Low"
     else:
         return "No value"
 
@@ -39,8 +38,7 @@ def main():
     The Equity Analysis Calculator helps you evaluate the equity of your URLs by considering various SEO metrics.
     It allows you to upload a CSV file with your URL data, process the data to calculate weighted scores, classify the URLs,
     and provide actionable recommendations based on their equity scores. Additionally, it supports the evaluation of keyword rankings
-    if a keyword CSV file is provided.
-    """)
+    if a keyword CSV file i    """)
 
     st.header("How to Use It")
     st.write("""
@@ -222,8 +220,7 @@ def main():
         
         # Remove weighted score columns from the export
         export_columns = [col for col in equity_data_df.columns if not col.endswith('_Weighted') and col != "Final_Weighted_Score"]
-        result_df = equity_data_df[export_columns]
-
+        result_df = equity_data_df[export_columns
         # Show the results
         st.write(result_df)
 
@@ -235,4 +232,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
