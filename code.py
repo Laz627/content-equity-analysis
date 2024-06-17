@@ -114,11 +114,11 @@ def main():
                 break
             except UnicodeDecodeError:
                 continue
-    
+
         # Manually clean and parse the data
         raw_data[0] = raw_data[0].astype(str).str.replace('ï»¿', '')
         cleaned_records = []
-    
+
         for i in range(0, len(raw_data), 4):
             if i + 3 < len(raw_data):
                 record = [
@@ -128,19 +128,19 @@ def main():
                     raw_data.iloc[i+3, 1]
                 ]
                 cleaned_records.append(record)
-    
+
         # Convert cleaned records to DataFrame
         keyword_data_df = pd.DataFrame(cleaned_records, columns=["url", "keywords", "search_volume", "ranking_position"])
         
         # Normalize column names
         keyword_data_df.columns = [col.strip().lower().replace(' ', '_') for col in keyword_data_df.columns]
-    
+
         # Ensure 'ranking_position' and 'search_volume' are numeric
         keyword_data_df['ranking_position'] = pd.to_numeric(keyword_data_df['ranking_position'], errors='coerce')
         keyword_data_df['search_volume'] = pd.to_numeric(keyword_data_df['search_volume'], errors='coerce')
-    
+
         st.write("Columns in uploaded keyword file:", keyword_data_df.columns)
-    
+
         required_keyword_columns = ["url", "keywords", "search_volume", "ranking_position"]
         if all(col in keyword_data_df.columns for col in required_keyword_columns):
             keyword_summary_df = keyword_data_df.groupby("url").agg(
@@ -154,10 +154,16 @@ def main():
 
     if uploaded_file is not None:
         equity_data_df = pd.read_csv(uploaded_file)
+        
+        # Normalize column names in equity data
+        equity_data_df.columns = [col.strip().lower().replace(' ', '_') for col in equity_data_df.columns]
 
-        if keyword_summary_df is not None:
+        # Check if 'url' column exists in both DataFrames
+        if 'url' in equity_data_df.columns and keyword_summary_df is not None and 'url' in keyword_summary_df.columns:
             # Merge keyword summary data with equity data
             equity_data_df = equity_data_df.merge(keyword_summary_df, on="url", how="left")
+        else:
+            st.error("'url' column is missing in one of the uploaded files.")
 
         # Correct data formatting for columns with numeric values
         columns_to_correct = [
