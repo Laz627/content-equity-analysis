@@ -69,14 +69,6 @@ def main():
     4. **View Results**: The app will display the analyzed results and provide a download link for the final output file.
     """)
 
-    st.header("Expected Outcomes")
-    st.write("""
-    After processing the data, the tool will:
-    - Provide a weighted score for each URL based on the selected metrics.
-    - Classify URLs into High, Medium, Low, or No value categories.
-    - Offer actionable recommendations for each URL based on their classification.
-    """)
-
     if st.button("Download Equity Analysis Template XLSX"):
         equity_template_df = pd.DataFrame(columns=[
             "URL", "status_code", "Inlinks", "backlinks", "referring_domains_score", "trust_flow_score", 
@@ -91,6 +83,14 @@ def main():
             equity_template_df.to_excel(writer, sheet_name='Equity Data', index=False)
             keyword_template_df.to_excel(writer, sheet_name='Keyword Data', index=False)
         st.markdown(get_excel_download_link(output, "equity_analysis_template.xlsx"), unsafe_allow_html=True)
+
+    st.header("Expected Outcomes")
+    st.write("""
+    After processing the data, the tool will:
+    - Provide a weighted score for each URL based on the selected metrics.
+    - Classify URLs into High, Medium, Low, or No value categories.
+    - Offer actionable recommendations for each URL based on their classification.
+    """)
 
     weights_mapping = {
         "Inlinks": 4, "backlinks": 7, "referring_domains_score": 10, "trust_flow_score": 8,
