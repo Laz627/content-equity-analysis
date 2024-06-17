@@ -105,48 +105,52 @@ def main():
 
     keyword_summary_df = None
 
-    if uploaded_keyword_file is not None:
-        # Try reading the file with different encodings
-        encodings = ['utf-8', 'latin1', 'ISO-8859-1']
-        for encoding in encodings:
-            try:
-                raw_data = pd.read_csv(uploaded_keyword_file, encoding=encoding, header=None)
-                break
-            except UnicodeDecodeError:
-                continue
+if uploaded_keyword_file is not None:
+    # Try reading the file with different encodings
+    encodings = ['utf-8', 'latin1', 'ISO-8859-1']
+    for encoding in encodings:
+        try:
+            raw_data = pd.read_csv(uploaded_keyword_file, encoding=encoding, header=None)
+            break
+        except UnicodeDecodeError:
+            continue
 
-        # Manually clean and parse the data
-        raw_data[0] = raw_data[0].astype(str).str.replace('ï»¿', '')
-        cleaned_records = []
+    # Manually clean and parse the data
+    raw_data[0] = raw_data[0].astype(str).str.replace('ï»¿', '')
+    cleaned_records = []
 
-        for i in range(0, len(raw_data), 4):
-            if i + 3 < len(raw_data):
-                record = [
-                    raw_data.iloc[i, 1],
-                    raw_data.iloc[i+1, 1],
-                    raw_data.iloc[i+2, 1],
-                    raw_data.iloc[i+3, 1]
-                ]
-                cleaned_records.append(record)
+    for i in range(0, len(raw_data), 4):
+        if i + 3 < len(raw_data):
+            record = [
+                raw_data.iloc[i, 1],
+                raw_data.iloc[i+1, 1],
+                raw_data.iloc[i+2, 1],
+                raw_data.iloc[i+3, 1]
+            ]
+            cleaned_records.append(record)
 
-        # Convert cleaned records to DataFrame
-        keyword_data_df = pd.DataFrame(cleaned_records, columns=["url", "keywords", "search_volume", "ranking_position"])
-        
-        # Normalize column names
-        keyword_data_df.columns = [col.strip().lower().replace(' ', '_') for col in keyword_data_df.columns]
+    # Convert cleaned records to DataFrame
+    keyword_data_df = pd.DataFrame(cleaned_records, columns=["url", "keywords", "search_volume", "ranking_position"])
+    
+    # Normalize column names
+    keyword_data_df.columns = [col.strip().lower().replace(' ', '_') for col in keyword_data_df.columns]
 
-        st.write("Columns in uploaded keyword file:", keyword_data_df.columns)
+    # Ensure 'ranking_position' and 'search_volume' are numeric
+    keyword_data_df['ranking_position'] = pd.to_numeric(keyword_data_df['ranking_position'], errors='coerce')
+    keyword_data_df['search_volume'] = pd.to_numeric(keyword_data_df['search_volume'], errors='coerce')
 
-        required_keyword_columns = ["url", "keywords", "search_volume", "ranking_position"]
-        if all(col in keyword_data_df.columns for col in required_keyword_columns):
-            keyword_summary_df = keyword_data_df.groupby("url").agg(
-                total_search_volume_score=("search_volume", "sum"),
-                number_of_keywords_page_1_score=("ranking_position", lambda x: (x <= 10).sum()),
-                number_of_keywords_page_2_score=("ranking_position", lambda x: ((x > 10) & (x <= 20)).sum()),
-                number_of_keywords_page_3_score=("ranking_position", lambda x: ((x > 20) & (x <= 30)).sum())
-            ).reset_index()
-        else:
-            st.error("Keyword file is missing required columns: 'URL', 'Keywords', 'Search Volume', 'Ranking Position'")
+    st.write("Columns in uploaded keyword file:", keyword_data_df.columns)
+
+    required_keyword_columns = ["url", "keywords", "search_volume", "ranking_position"]
+    if all(col in keyword_data_df.columns for col in required_keyword_columns):
+        keyword_summary_df = keyword_data_df.groupby("url").agg(
+            total_search_volume_score=("search_volume", "sum"),
+            number_of_keywords_page_1_score=("ranking_position", lambda x: (x <= 10).sum()),
+            number_of_keywords_page_2_score=("ranking_position", lambda x: ((x > 10) & (x <= 20)).sum()),
+            number_of_keywords_page_3_score=("ranking_position", lambda x: ((x > 20) & (x <= 30)).sum())
+        ).reset_index()
+    else:
+        st.error("Keyword file is missing required columns: 'URL', 'Keywords', 'Search Volume', 'Ranking Position'")
 
     if uploaded_file is not None:
         equity_data_df = pd.read_csv(uploaded_file)
