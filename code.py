@@ -174,16 +174,14 @@ def main():
         }
         equity_data_df["Action"] = equity_data_df["Recommendation"].map(action_mapping)
 
-        # Remove weighted score columns from the export
-        export_columns = [col for col in equity_data_df.columns if not col.endswith('_Weighted') and col != "Final_Weighted_Score"]
-        result_df = equity_data_df[export_columns]
-
         # Ensure keyword columns are included in the output
         keyword_columns = ["total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
         for col in keyword_columns:
-            if col in equity_data_df.columns and col not in export_columns:
-                export_columns.append(col)
+            if col in equity_data_df.columns and col not in columns_to_use:
+                columns_to_use.append(col)
         
+        # Remove weighted score columns from the export
+        export_columns = [col for col in equity_data_df.columns if not col.endswith('_Weighted') and col != "Final_Weighted_Score"]
         result_df = equity_data_df[export_columns]
 
         # Show the results
