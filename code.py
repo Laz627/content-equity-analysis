@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
-@st.cache
+@st.cache_data
 def convert_to_numeric(value):
     """Converts a value to numeric format after replacing commas."""
     try:
@@ -21,7 +21,7 @@ def classify_score(score, high_thresh, med_thresh):
     else:
         return "No value"
 
-@st.cache
+@st.cache_data
 def get_table_download_link(df, filename):
     """Generates a link to download the DataFrame as a CSV file."""
     import base64
@@ -171,7 +171,7 @@ def main():
             st.write("Merged DataFrame Preview:", equity_data_df.head(10))
         else:
             st.error("'url' column is missing in one of the uploaded files.")
-
+        
         # Correct data formatting for columns with numeric values
         columns_to_correct = [
             "total_search_volume_score",
@@ -179,34 +179,34 @@ def main():
             "number_of_keywords_page_2_score",
             "number_of_keywords_page_3_score"
         ]
-
+        
         for col in columns_to_correct:
             if col in equity_data_df.columns:
                 equity_data_df[col] = equity_data_df[col].apply(convert_to_numeric)
-
+        
         # Calculating the weighted scores for each metric in the adjusted dataset
         for column in columns_to_use:
             if column in equity_data_df.columns:
                 weight = weights_mapping[column]
                 equity_data_df[f"{column}_Weighted"] = equity_data_df[column] * weight
-
+        
         # Calculate Trust Ratio Score as trust_flow_score / citation_flow_score
         if "trust_flow_score" in columns_to_use and "citation_flow_score" in columns_to_use:
             equity_data_df["Trust_Ratio_Weighted"] = (equity_data_df["trust_flow_score"] / equity_data_df["citation_flow_score"]).fillna(0) * 2
-
+        
         # Columns to include for the final weighted score
         columns_for_final_score = [f"{col}_Weighted" for col in columns_to_use if col in equity_data_df.columns] + ["Trust_Ratio_Weighted"]
-
+        
         # Compute the final weighted score for each URL
         equity_data_df["Final_Weighted_Score"] = equity_data_df[columns_for_final_score].sum(axis=1)
-
+        
         # Compute thresholds for classification
         high_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.85)
         medium_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.50)
-
+        
         # Apply classification
         equity_data_df["Recommendation"] = equity_data_df["Final_Weighted_Score"].apply(lambda x: classify_score(x, high_threshold, medium_threshold))
-
+        
         # Map the "Recommendation" to the corresponding action
         action_mapping = {
             "High": "Keep or Maintain 1:1 redirect",
@@ -215,7 +215,7 @@ def main():
             "No value": "Do not keep or migrate"
         }
         equity_data_df["Action"] = equity_data_df["Recommendation"].map(action_mapping)
-
+        
         # Ensure keyword columns are included in the output
         keyword_columns = ["total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
         for col in keyword_columns:
@@ -225,15 +225,15 @@ def main():
         # Remove weighted score columns from the export
         export_columns = [col for col in equity_data_df.columns if not col.endswith('_Weighted') and col != "Final_Weighted_Score"]
         result_df = equity_data_df[export_columns]
-
+        
         # Show the results
         st.write(result_df)
-
+        
         # Allow users to download the resulting DataFrame
         st.markdown(get_table_download_link(result_df, "equity_analysis_results.csv"), unsafe_allow_html=True)
-
-    if uploaded_keyword_file is not None and uploaded_file is None:
-        st.error("Please upload the Equity Analysis CSV file first.")
+        
+        if uploaded_keyword_file is not None and uploaded_file is None:
+            st.error("Please upload the Equity Analysis CSV file first.")
 
 if __name__ == "__main__":
     main()
