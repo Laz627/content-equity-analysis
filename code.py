@@ -44,7 +44,10 @@ def normalize(df, metric_cols):
         if col in df.columns:
             min_val = df[col].min()
             max_val = df[col].max()
-            df_normalized[col] = (df[col] - min_val) / (max_val - min_val)
+            if max_val != min_val:
+                df_normalized[col] = (df[col] - min_val) / (max_val - min_val)
+            else: 
+                df_normalized[col] = df[col]  # if all values are the same, normalization isn't necessary
     return df_normalized
 
 def main():
@@ -117,8 +120,6 @@ def main():
         default=list(weights_mapping.keys())
     )
 
-    keyword_summary_df = None
-
     if uploaded_file is not None:
         try:
             # Reading data and keywords from the XLSX file
@@ -128,11 +129,8 @@ def main():
             st.error(f"Error reading sheets: {e}")
             return
 
-        # Copy of the original DataFrame for normalization and calculations
-        norm_equity_data_df = equity_data_df.copy()
-
-        # Normalize column names in equity data
-        norm_equity_data_df.columns = [col.strip().lower().replace(' ', '_') for col in norm_equity_data_df.columns]
+        # Normalize column names in equity and keyword data
+        equity_data_df.columns = [col.strip().lower().replace(' ', '_') for col in equity_data_df.columns]
         keyword_data_df.columns = [col.strip().lower().replace(' ', '_') for col in keyword_data_df.columns]
 
         # Ensure 'ranking_position' and 'search_volume' are numeric in keyword data
@@ -152,10 +150,10 @@ def main():
         else:
             st.error("Keyword file is missing required columns: 'URL', 'Keywords', 'Search Volume', 'Ranking Position'")
 
-        if 'url' in norm_equity_data_df.columns and keyword_summary_df is not None and 'url' in keyword_summary_df.columns:
+        if 'url' in equity_data_df.columns and keyword_summary_df is not None and 'url' in keyword_summary_df.columns:
             # Merge keyword summary data with equity data
-            norm_equity_data_df = norm_equity_data_df.merge(keyword_summary_df, on="url", how="left")
-            st.write("Merged DataFrame Preview:", norm_equity_data_df.head(10))
+            equity_data_df = equity_data_df.merge(keyword_summary_df, on="url", how="left")
+            st.write("Merged DataFrame Preview:", equity_data_df.head(10))
         else:
             st.error("'url' column is missing in one of the uploaded sheets.")
 
@@ -168,22 +166,22 @@ def main():
         ]
 
         for col in columns_to_correct:
-            if col in norm_equity_data_df.columns:
-                norm_equity_data_df[col] = norm_equity_data_df[col].apply(convert_to_numeric)
+            if col in equity_data_df.columns:
+                equity_data_df[col] = equity_data_df[col].apply(convert_to_numeric)
 
         # Normalize the data before weighting
-        norm_equity_data_df = normalize(norm_equity_data_df, columns_to_use)
+        norm_data_df = normalize(equity_data_df.copy(), columns_to_use)
 
         # Calculating the weighted scores for each metric in the adjusted dataset
         weighted_scores = []
         for column in columns_to_use:
-            if column in norm_equity_data_df.columns:
+            if column in norm_data_df.columns:
                 weight = weights_mapping[column]
-                weighted_scores.append(norm_equity_data_df[column] * weight)
+                weighted_scores.append(norm_data_df[column] * weight)
 
         # Calculate Trust Ratio Score as trust_flow_score / citation_flow_score
         if "trust_flow_score" in columns_to_use and "citation_flow_score" in columns_to_use:
-            trust_ratio_weighted = (norm_equity_data_df["trust_flow_score"] / norm_equity_data_df["citation_flow_score"]).fillna(0) * 2
+            trust_ratio_weighted = (norm_data_df["trust_flow_score"] / norm_data_df["citation_flow_score"]).fillna(0) * 2
             weighted_scores.append(trust_ratio_weighted)
 
         # Compute the final weighted score for each URL
@@ -205,8 +203,14 @@ def main():
         }
         equity_data_df["Action"] = equity_data_df["Recommendation"].map(action_mapping)
 
+        # Ensure keyword columns are included in the output
+        keyword_columns = ["total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
+        for col in keyword_columns:
+            if col in equity_data_df.columns and col not in columns_to_use:
+                columns_to_use.append(col)
+        
         # Columns to include in the final output
-        export_columns = [col for col in equity_data_df.columns if col != "Final_Weighted_Score"]
+        export_columns = [col for col in equity_data_df.columns if col not in ("Final_Weighted_Score",)]
         result_df = equity_data_df[export_columns]
 
         # Show the results
