@@ -178,6 +178,14 @@ def main():
         export_columns = [col for col in equity_data_df.columns if not col.endswith('_Weighted') and col != "Final_Weighted_Score"]
         result_df = equity_data_df[export_columns]
 
+        # Ensure keyword columns are included in the output
+        keyword_columns = ["total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
+        for col in keyword_columns:
+            if col in equity_data_df.columns and col not in export_columns:
+                export_columns.append(col)
+        
+        result_df = equity_data_df[export_columns]
+
         # Show the results
         st.write(result_df)
 
@@ -189,4 +197,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
