@@ -103,6 +103,8 @@ def main():
         default=list(weights_mapping.keys())
     )
 
+    keyword_summary_df = None
+
     if uploaded_keyword_file is not None:
         keyword_data_df = pd.read_csv(uploaded_keyword_file)
         required_keyword_columns = ["URL", "Keywords", "Search Volume", "Ranking Position"]
@@ -124,7 +126,7 @@ def main():
     if uploaded_file is not None:
         equity_data_df = pd.read_csv(uploaded_file)
 
-        if uploaded_keyword_file is not None:
+        if keyword_summary_df is not None:
             # Merge keyword summary data with equity data
             equity_data_df = equity_data_df.merge(keyword_summary_df, on="URL", how="left")
 
@@ -187,3 +189,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
