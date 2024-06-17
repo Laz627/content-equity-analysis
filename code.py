@@ -142,7 +142,7 @@ def main():
         keyword_data_df['ranking_position'] = pd.to_numeric(keyword_data_df['ranking_position'], errors='coerce')
         keyword_data_df['search_volume'] = pd.to_numeric(keyword_data_df['search_volume'], errors='coerce')
 
-        st.write("Columns in uploaded keyword file:", keyword_data_df.columns)
+        # Validate the parsed data
         st.write("Keyword DataFrame Preview:", keyword_data_df.head(10))
 
         required_keyword_columns = ["url", "keywords", "search_volume", "ranking_position"]
