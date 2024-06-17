@@ -153,18 +153,23 @@ def main():
     if uploaded_keyword_file is not None:
         keyword_data_df = pd.read_csv(uploaded_keyword_file)
 
-        # Compute total keywords, total search volume, and keywords by ranking position
-        total_keywords = keyword_data_df.shape[0]
-        total_search_volume = keyword_data_df['Search Volume'].sum()
-        page_1_keywords = keyword_data_df[keyword_data_df['Ranking Position'] <= 10].shape[0]
-        page_2_keywords = keyword_data_df[(keyword_data_df['Ranking Position'] > 10) & (keyword_data_df['Ranking Position'] <= 20)].shape[0]
-        page_3_keywords = keyword_data_df[(keyword_data_df['Ranking Position'] > 20) & (keyword_data_df['Ranking Position'] <= 30)].shape[0]
+        # Ensure the required columns are present
+        required_keyword_columns = ["Keywords", "Search Volume", "Ranking Position"]
+        if all(col in keyword_data_df.columns for col in required_keyword_columns):
+            # Compute total keywords, total search volume, and keywords by ranking position
+            total_keywords = keyword_data_df.shape[0]
+            total_search_volume = keyword_data_df['Search Volume'].sum()
+            page_1_keywords = keyword_data_df[keyword_data_df['Ranking Position'] <= 10].shape[0]
+            page_2_keywords = keyword_data_df[(keyword_data_df['Ranking Position'] > 10) & (keyword_data_df['Ranking Position'] <= 20)].shape[0]
+            page_3_keywords = keyword_data_df[(keyword_data_df['Ranking Position'] > 20) & (keyword_data_df['Ranking Position'] <= 30)].shape[0]
 
-        st.write(f"Total Keywords: {total_keywords}")
-        st.write(f"Total Search Volume: {total_search_volume}")
-        st.write(f"Keywords on Page 1: {page_1_keywords}")
-        st.write(f"Keywords on Page 2: {page_2_keywords}")
-        st.write(f"Keywords on Page 3: {page_3_keywords}")
+            st.write(f"Total Keywords: {total_keywords}")
+            st.write(f"Total Search Volume: {total_search_volume}")
+            st.write(f"Keywords on Page 1: {page_1_keywords}")
+            st.write(f"Keywords on Page 2: {page_2_keywords}")
+            st.write(f"Keywords on Page 3: {page_3_keywords}")
+        else:
+            st.error("The keyword CSV file must include the columns: Keywords, Search Volume, and Ranking Position")
 
 def get_table_download_link(df):
     """Generates a link to download the DataFrame as a CSV file."""
