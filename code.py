@@ -1,8 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import io
-import openpyxl
 
 @st.cache_data
 def convert_to_numeric(value):
@@ -25,15 +23,11 @@ def classify_score(score, high_thresh, med_thresh):
 
 @st.cache_data
 def get_table_download_link(df, filename):
-    """Generates a link to download the DataFrame as an Excel file."""
+    """Generates a link to download the DataFrame as a CSV file."""
     import base64
-    output = io.BytesIO()
-    writer = pd.ExcelWriter(output, engine='xlsxwriter')
-    df.to_excel(writer, index=False, sheet_name='Sheet1')
-    writer.save()
-    excel_data = output.getvalue()
-    b64 = base64.b64encode(excel_data).decode()
-    href = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="{filename}">Download Excel file</a>'
+    csv = df.to_csv(index=False)
+    b64 = base64.b64encode(csv.encode()).decode()
+    href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">Download CSV file</a>'
     return href
 
 def main():
@@ -43,15 +37,14 @@ def main():
     st.header("How It Works")
     st.write("""
     The Equity Analysis Calculator helps you evaluate the equity of your URLs by considering various SEO metrics.
-    It allows you to upload an Excel file with your URL data, process the data to calculate weighted scores, classify the URLs,
-    and provide actionable recommendations based on their equity scores. Additionally, it supports the evaluation of keyword rankings
-    if a keyword Excel file is provided.
+    It allows you to upload an XLSX file with your URL data and keywords, process the data to calculate weighted scores, classify the URLs,
+    and provide actionable recommendations based on their equity scores. 
     """)
 
     st.header("How to Use It")
     st.write("""
-    1. **Download the Template**: Click the 'Download Equity Analysis Template Excel' or 'Download Keyword Template Excel' buttons to download template files with the required columns.
-    2. **Upload Your Data**: Use the 'Upload your Excel file' button to upload your equity analysis data. Optionally, upload a keyword data file using 'Upload your keyword Excel file' for additional keyword analysis.
+    1. **Download the Template**: Click the 'Download Equity Analysis Template XLSX' button to download a template file with the required columns.
+    2. **Upload Your Data**: Use the 'Upload your XLSX file' button to upload your equity analysis data and keywords in separate tabs.
     3. **Select Columns**: Choose which columns to include in the analysis from the multiselect dropdown.
     4. **View Results**: The app will display the analyzed results and provide a download link for the final output file.
     """)
@@ -62,28 +55,25 @@ def main():
     - Provide a weighted score for each URL based on the selected metrics.
     - Classify URLs into High, Medium, Low, or No value categories.
     - Offer actionable recommendations for each URL based on their classification.
-    - Optionally, analyze and display keyword ranking metrics if a keyword file is provided.
     """)
 
-    # Allow users to download a template Excel file for equity analysis
-    if st.button("Download Equity Analysis Template Excel"):
+    # Allow users to download a template XLSX file for equity and keyword analysis
+    if st.button("Download Equity Analysis Template XLSX"):
         equity_template_df = pd.DataFrame(columns=[
             "URL", "status_code", "Inlinks", "backlinks", "referring_domains_score", "trust_flow_score", 
             "citation_flow_score", "gsc_clicks_score", "gsc_impressions_score", 
             "unique_pageviews_organic_score", "unique_pageviews_all_traffic_score", "completed_goals_all_traffic_score"
         ])
-        st.markdown(get_table_download_link(equity_template_df, "equity_analysis_template.xlsx"), unsafe_allow_html=True)
-
-    # Allow users to download a template Excel file for keyword analysis
-    if st.button("Download Keyword Template Excel"):
         keyword_template_df = pd.DataFrame(columns=[
             "URL", "Keywords", "Search Volume", "Ranking Position"
         ])
-        st.markdown(get_table_download_link(keyword_template_df, "keyword_template.xlsx"), unsafe_allow_html=True)
+        with pd.ExcelWriter("equity_analysis_template.xlsx") as writer:
+            equity_template_df.to_excel(writer, sheet_name='Equity Data', index=False)
+            keyword_template_df.to_excel(writer, sheet_name='Keyword Data', index=False)
+        st.markdown(get_table_download_link(pd.DataFrame(), "equity_analysis_template.xlsx"), unsafe_allow_html=True)
 
-    # Allow users to upload their keyword Excel file first
-    uploaded_keyword_file = st.file_uploader("Upload your Keyword Excel file", type="xlsx")
-    uploaded_file = st.file_uploader("Upload your Equity Analysis Excel file", type="xlsx")
+    # Allow users to upload their XLSX file with equity and keyword data in separate tabs
+    uploaded_file = st.file_uploader("Upload your XLSX file", type="xlsx")
 
     # Column selection before running the analysis
     weights_mapping = {
@@ -111,21 +101,27 @@ def main():
 
     keyword_summary_df = None
 
-    if uploaded_keyword_file is not None:
-        keyword_data_df = pd.read_excel(uploaded_keyword_file)
-    
-        # Normalize column names
+    if uploaded_file is not None:
+        try:
+            # Reading data and keywords from the XLSX file
+            sheet_names = pd.ExcelFile(uploaded_file).sheet_names
+            equity_data_df = pd.read_excel(uploaded_file, sheet_name=sheet_names[0])
+            keyword_data_df = pd.read_excel(uploaded_file, sheet_name=sheet_names[1])
+        except Exception as e:
+            st.error(f"Error reading sheets: {e}")
+            return
+
+        # Normalize column names in equity data
+        equity_data_df.columns = [col.strip().lower().replace(' ', '_') for col in equity_data_df.columns]
         keyword_data_df.columns = [col.strip().lower().replace(' ', '_') for col in keyword_data_df.columns]
-    
-        # Ensure 'ranking_position' and 'search_volume' are numeric
+
+        # Ensure 'ranking_position' and 'search_volume' are numeric in keyword data
         keyword_data_df['ranking_position'] = pd.to_numeric(keyword_data_df['ranking_position'], errors='coerce')
         keyword_data_df['search_volume'] = pd.to_numeric(keyword_data_df['search_volume'], errors='coerce')
-    
-        # Validate the parsed data
-        st.write("Keyword DataFrame Preview:", keyword_data_df.head(10))
-    
+        
         required_keyword_columns = ["url", "keywords", "search_volume", "ranking_position"]
         if all(col in keyword_data_df.columns for col in required_keyword_columns):
+            # Process keyword data to summarize
             keyword_summary_df = keyword_data_df.groupby("url").agg(
                 total_search_volume_score=("search_volume", "sum"),
                 number_of_keywords_page_1_score=("ranking_position", lambda x: (x <= 10).sum()),
@@ -136,19 +132,12 @@ def main():
         else:
             st.error("Keyword file is missing required columns: 'URL', 'Keywords', 'Search Volume', 'Ranking Position'")
 
-    if uploaded_file is not None:
-        equity_data_df = pd.read_excel(uploaded_file)
-        
-        # Normalize column names in equity data
-        equity_data_df.columns = [col.strip().lower().replace(' ', '_') for col in equity_data_df.columns]
-
-        # Check if 'url' column exists in both DataFrames
         if 'url' in equity_data_df.columns and keyword_summary_df is not None and 'url' in keyword_summary_df.columns:
             # Merge keyword summary data with equity data
             equity_data_df = equity_data_df.merge(keyword_summary_df, on="url", how="left")
             st.write("Merged DataFrame Preview:", equity_data_df.head(10))
         else:
-            st.error("'url' column is missing in one of the uploaded files.")
+            st.error("'url' column is missing in one of the uploaded sheets.")
 
         # Correct data formatting for columns with numeric values
         columns_to_correct = [
@@ -208,10 +197,7 @@ def main():
         st.write(result_df)
 
         # Allow users to download the resulting DataFrame
-        st.markdown(get_table_download_link(result_df, "equity_analysis_results.xlsx"), unsafe_allow_html=True)
-
-    if uploaded_keyword_file is not None and uploaded_file is None:
-        st.error("Please upload the Equity Analysis Excel file first.")
+        st.markdown(get_table_download_link(result_df, "equity_analysis_results.csv"), unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
