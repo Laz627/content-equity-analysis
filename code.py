@@ -44,10 +44,19 @@ def main():
 
     st.header("How to Use It")
     st.write("""
-    1. **Download the Template**: Click the 'Download Equity Analysis Template CSV' and 'Download Keyword Template CSV' buttons to download template files with the required columns.
-    2. **Upload Your Data**: Use the 'Upload your CSV file' button to upload your keyword data and your equity analysis data. The keyword data file should be uploaded first.
-    3. **Select Columns**: Choose which columns to include in the analysis from the multiselect dropdown below.
+    1. **Download the Template**: Click the 'Download Equity Analysis Template CSV' or 'Download Keyword Template CSV' buttons to download template files with the required columns.
+    2. **Upload Your Data**: Use the 'Upload your CSV file' button to upload your equity analysis data. Optionally, upload a keyword data file using 'Upload your keyword CSV file' for additional keyword analysis.
+    3. **Select Columns**: Choose which columns to include in the analysis from the multiselect dropdown.
     4. **View Results**: The app will display the analyzed results and provide a download link for the final output file.
+    """)
+
+    st.header("Expected Outcomes")
+    st.write("""
+    After processing the data, the tool will:
+    - Provide a weighted score for each URL based on the selected metrics.
+    - Classify URLs into High, Medium, Low, or No value categories.
+    - Offer actionable recommendations for each URL based on their classification.
+    - Optionally, analyze and display keyword ranking metrics if a keyword file is provided.
     """)
 
     # Allow users to download a template CSV file for equity analysis
@@ -66,16 +75,11 @@ def main():
         ])
         st.markdown(get_table_download_link(keyword_template_df, "keyword_template.csv"), unsafe_allow_html=True)
 
-    st.header("Expected Outcomes")
-    st.write("""
-    After processing the data, the tool will:
-    - Provide a weighted score for each URL based on the selected metrics.
-    - Classify URLs into High, Medium, Low, or No value categories.
-    - Offer actionable recommendations for each URL based on their classification.
-    - Optionally, analyze and display keyword ranking metrics if a keyword file is provided.
-    """)
+    # Allow users to upload their keyword CSV file first
+    uploaded_keyword_file = st.file_uploader("Upload your Keyword CSV file", type="csv")
+    uploaded_file = st.file_uploader("Upload your Equity Analysis CSV file", type="csv")
 
-   # Column selection before running the analysis
+    # Column selection before running the analysis
     weights_mapping = {
         "Inlinks": 4,
         "backlinks": 7,
@@ -98,15 +102,18 @@ def main():
         options=list(weights_mapping.keys()),
         default=list(weights_mapping.keys())
     )
-    
-    # Allow users to upload their keyword CSV file first
-    uploaded_keyword_file = st.file_uploader("Upload your Keyword CSV file", type="csv")
-    uploaded_file = st.file_uploader("Upload your Equity Analysis CSV file", type="csv")
 
     keyword_summary_df = None
 
     if uploaded_keyword_file is not None:
-        keyword_data_df = pd.read_csv(uploaded_keyword_file)
+        encodings = ['utf-8', 'latin1', 'ISO-8859-1']
+        for encoding in encodings:
+            try:
+                keyword_data_df = pd.read_csv(uploaded_keyword_file, encoding=encoding)
+                break
+            except UnicodeDecodeError:
+                continue
+
         required_keyword_columns = ["URL", "Keywords", "Search Volume", "Ranking Position"]
         if all(col in keyword_data_df.columns for col in required_keyword_columns):
             keyword_summary_df = keyword_data_df.groupby("URL").agg(
@@ -177,7 +184,7 @@ def main():
         
         # Remove weighted score columns from the export
         export_columns = [col for col in equity_data_df.columns if not col.endswith('_Weighted') and col != "Final_Weighted_Score"]
-        result_df = equity_data_df[export_columns]
+                result_df = equity_data_df[export_columns]
 
         # Show the results
         st.write(result_df)
@@ -186,8 +193,7 @@ def main():
         st.markdown(get_table_download_link(result_df, "equity_analysis_results.csv"), unsafe_allow_html=True)
 
     if uploaded_keyword_file is not None and uploaded_file is None:
-        st.error("Please remove any unncessary columns and then upload the Equity Analysis CSV file to begin running the script.")
+        st.error("Please upload the Equity Analysis CSV file first.")
 
 if __name__ == "__main__":
     main()
-
