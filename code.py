@@ -52,12 +52,14 @@ def normalize(df, metric_cols):
 
 def check_zero_rows(df, metric_cols):
     """Check which rows are entirely zero for specified columns."""
-    mask = (df[metric_cols] == 0).all(axis=1)
+    valid_metric_cols = [col for col in metric_cols if col in df.columns]
+    mask = (df[valid_metric_cols] == 0).all(axis=1)
     return df[mask]
 
 def check_non_zero_rows(df, metric_cols):
     """Check which rows have non-zero values for specified columns."""
-    mask = (df[metric_cols] > 0).any(axis=1)
+    valid_metric_cols = [col for col in metric_cols if col in df.columns]
+    mask = (df[valid_metric_cols] > 0).any(axis=1)
     return df[mask]
 
 def main():
@@ -231,8 +233,9 @@ def main():
         for col in keyword_columns:
             if col in equity_data_df.columns and col not in columns_to_use:
                 columns_to_use.append(col)
-
-        export_columns = [col for col in equity_data_df.columns if col not in ("Final_Weighted_Score",)]
+        
+        # Validate export columns exist in the DataFrame.
+        export_columns = [col for col in equity_data_df.columns if col in equity_data_df and col not in ("Final_Weighted_Score",)]
         result_df = equity_data_df[export_columns]
 
         # Ensure no blank cells by filling result_df with 0s where necessary
