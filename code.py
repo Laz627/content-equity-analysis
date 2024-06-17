@@ -113,12 +113,12 @@ def main():
                 break
             except UnicodeDecodeError:
                 continue
-        
+    
         # Normalize column names
         keyword_data_df.columns = [col.strip().lower().replace(' ', '_') for col in keyword_data_df.columns]
-
+    
         st.write("Columns in uploaded keyword file:", keyword_data_df.columns)
-
+    
         required_keyword_columns = ["url", "keywords", "search_volume", "ranking_position"]
         if all(col in keyword_data_df.columns for col in required_keyword_columns):
             keyword_summary_df = keyword_data_df.groupby("url").agg(
