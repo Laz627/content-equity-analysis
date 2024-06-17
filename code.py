@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import io
 
 @st.cache_data
 def convert_to_numeric(value):
@@ -23,11 +24,15 @@ def classify_score(score, high_thresh, med_thresh):
 
 @st.cache_data
 def get_table_download_link(df, filename):
-    """Generates a link to download the DataFrame as a CSV file."""
+    """Generates a link to download the DataFrame as an Excel file."""
     import base64
-    csv = df.to_csv(index=False)
-    b64 = base64.b64encode(csv.encode()).decode()
-    href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">Download CSV file</a>'
+    output = io.BytesIO()
+    writer = pd.ExcelWriter(output, engine='xlsxwriter')
+    df.to_excel(writer, index=False, sheet_name='Sheet1')
+    writer.save()
+    excel_data = output.getvalue()
+    b64 = base64.b64encode(excel_data).decode()
+    href = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="{filename}">Download Excel file</a>'
     return href
 
 def main():
@@ -37,15 +42,15 @@ def main():
     st.header("How It Works")
     st.write("""
     The Equity Analysis Calculator helps you evaluate the equity of your URLs by considering various SEO metrics.
-    It allows you to upload a CSV file with your URL data, process the data to calculate weighted scores, classify the URLs,
+    It allows you to upload an Excel file with your URL data, process the data to calculate weighted scores, classify the URLs,
     and provide actionable recommendations based on their equity scores. Additionally, it supports the evaluation of keyword rankings
-    if a keyword CSV file is provided.
+    if a keyword Excel file is provided.
     """)
 
     st.header("How to Use It")
     st.write("""
-    1. **Download the Template**: Click the 'Download Equity Analysis Template CSV' or 'Download Keyword Template CSV' buttons to download template files with the required columns.
-    2. **Upload Your Data**: Use the 'Upload your CSV file' button to upload your equity analysis data. Optionally, upload a keyword data file using 'Upload your keyword CSV file' for additional keyword analysis.
+    1. **Download the Template**: Click the 'Download Equity Analysis Template Excel' or 'Download Keyword Template Excel' buttons to download template files with the required columns.
+    2. **Upload Your Data**: Use the 'Upload your Excel file' button to upload your equity analysis data. Optionally, upload a keyword data file using 'Upload your keyword Excel file' for additional keyword analysis.
     3. **Select Columns**: Choose which columns to include in the analysis from the multiselect dropdown.
     4. **View Results**: The app will display the analyzed results and provide a download link for the final output file.
     """)
@@ -59,25 +64,25 @@ def main():
     - Optionally, analyze and display keyword ranking metrics if a keyword file is provided.
     """)
 
-    # Allow users to download a template CSV file for equity analysis
-    if st.button("Download Equity Analysis Template CSV"):
+    # Allow users to download a template Excel file for equity analysis
+    if st.button("Download Equity Analysis Template Excel"):
         equity_template_df = pd.DataFrame(columns=[
             "URL", "status_code", "Inlinks", "backlinks", "referring_domains_score", "trust_flow_score", 
             "citation_flow_score", "gsc_clicks_score", "gsc_impressions_score", 
             "unique_pageviews_organic_score", "unique_pageviews_all_traffic_score", "completed_goals_all_traffic_score"
         ])
-        st.markdown(get_table_download_link(equity_template_df, "equity_analysis_template.csv"), unsafe_allow_html=True)
+        st.markdown(get_table_download_link(equity_template_df, "equity_analysis_template.xlsx"), unsafe_allow_html=True)
 
-    # Allow users to download a template CSV file for keyword analysis
-    if st.button("Download Keyword Template CSV"):
+    # Allow users to download a template Excel file for keyword analysis
+    if st.button("Download Keyword Template Excel"):
         keyword_template_df = pd.DataFrame(columns=[
             "URL", "Keywords", "Search Volume", "Ranking Position"
         ])
-        st.markdown(get_table_download_link(keyword_template_df, "keyword_template.csv"), unsafe_allow_html=True)
+        st.markdown(get_table_download_link(keyword_template_df, "keyword_template.xlsx"), unsafe_allow_html=True)
 
-    # Allow users to upload their keyword CSV file first
-    uploaded_keyword_file = st.file_uploader("Upload your Keyword CSV file", type="csv")
-    uploaded_file = st.file_uploader("Upload your Equity Analysis CSV file", type="csv")
+    # Allow users to upload their keyword Excel file first
+    uploaded_keyword_file = st.file_uploader("Upload your Keyword Excel file", type="xlsx")
+    uploaded_file = st.file_uploader("Upload your Equity Analysis Excel file", type="xlsx")
 
     # Column selection before running the analysis
     weights_mapping = {
@@ -106,35 +111,7 @@ def main():
     keyword_summary_df = None
 
     if uploaded_keyword_file is not None:
-        # Try reading the file with different encodings
-        encodings = ['utf-8', 'latin1', 'ISO-8859-1']
-        for encoding in encodings:
-            try:
-                raw_data = pd.read_csv(uploaded_keyword_file, encoding=encoding, header=None)
-                break
-            except UnicodeDecodeError:
-                continue
-    
-        # Manually clean and parse the data
-        raw_data[0] = raw_data[0].astype(str).str.replace('ï»¿', '')
-        st.write("Raw Data Preview:", raw_data.head(20))  # Inspect the first 20 rows of the raw data
-    
-        cleaned_records = []
-    
-        # Check if each set of four rows corresponds to one complete record
-        for i in range(0, len(raw_data), 4):
-            if i + 3 < len(raw_data):
-                # Ensure we have four elements for a complete record
-                record = [
-                    raw_data.iloc[i, 1],  # URL
-                    raw_data.iloc[i+1, 1],  # Keywords
-                    raw_data.iloc[i+2, 1],  # Search Volume
-                    raw_data.iloc[i+3, 1]  # Ranking Position
-                ]
-                cleaned_records.append(record)
-    
-        # Convert cleaned records to DataFrame
-        keyword_data_df = pd.DataFrame(cleaned_records, columns=["url", "keywords", "search_volume", "ranking_position"])
+        keyword_data_df = pd.read_excel(uploaded_keyword_file)
     
         # Normalize column names
         keyword_data_df.columns = [col.strip().lower().replace(' ', '_') for col in keyword_data_df.columns]
@@ -159,7 +136,7 @@ def main():
             st.error("Keyword file is missing required columns: 'URL', 'Keywords', 'Search Volume', 'Ranking Position'")
 
     if uploaded_file is not None:
-        equity_data_df = pd.read_csv(uploaded_file)
+        equity_data_df = pd.read_excel(uploaded_file)
         
         # Normalize column names in equity data
         equity_data_df.columns = [col.strip().lower().replace(' ', '_') for col in equity_data_df.columns]
@@ -230,10 +207,10 @@ def main():
         st.write(result_df)
 
         # Allow users to download the resulting DataFrame
-        st.markdown(get_table_download_link(result_df, "equity_analysis_results.csv"), unsafe_allow_html=True)
+        st.markdown(get_table_download_link(result_df, "equity_analysis_results.xlsx"), unsafe_allow_html=True)
 
     if uploaded_keyword_file is not None and uploaded_file is None:
-        st.error("Please upload the Equity Analysis CSV file first.")
+        st.error("Please upload the Equity Analysis Excel file first.")
 
 if __name__ == "__main__":
     main()
