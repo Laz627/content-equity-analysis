@@ -122,6 +122,8 @@ def main():
             keyword_summary_df = pd.DataFrame(keyword_summary_df.to_dict()['Ranking Position'].tolist(), index=keyword_summary_df['URL']).reset_index()
             keyword_summary_df.columns = ["URL", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
             keyword_summary_df["total_search_volume_score"] = keyword_data_df.groupby("URL")["Search Volume"].sum().values
+        else:
+            st.error("Keyword file is missing required columns: 'URL', 'Keywords', 'Search Volume', 'Ranking Position'")
 
     if uploaded_file is not None:
         equity_data_df = pd.read_csv(uploaded_file)
@@ -178,8 +180,8 @@ def main():
         keyword_columns = ["total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
         for col in keyword_columns:
             if col in equity_data_df.columns:
-                export_columns = list(equity_data_df.columns)  # Ensure keyword columns are included
-
+                columns_to_use.append(col)
+        
         # Remove weighted score columns from the export
         export_columns = [col for col in equity_data_df.columns if not col.endswith('_Weighted') and col != "Final_Weighted_Score"]
         result_df = equity_data_df[export_columns]
