@@ -82,6 +82,31 @@ def main():
     if uploaded_file is not None:
         equity_data_df = pd.read_csv(uploaded_file)
 
+        # If keyword file is provided, merge it with the equity data first
+        if uploaded_keyword_file is not None:
+            keyword_data_df = pd.read_csv(uploaded_keyword_file)
+            required_keyword_columns = ["URL", "Keywords", "Search Volume", "Ranking Position"]
+            if all(col in keyword_data_df.columns for col in required_keyword_columns):
+                keyword_summary_df = keyword_data_df.groupby("URL").agg({
+                    "Search Volume": "sum",
+                    "Ranking Position": lambda x: {
+                        "Page 1": (x <= 10).sum(),
+                        "Page 2": ((x > 10) & (x <= 20)).sum(),
+                        "Page 3": ((x > 20) & (x <= 30)).sum()
+                    }
+                }).reset_index()
+
+                # Normalize the keyword summary data to correct column structure
+                keyword_summary_df = pd.DataFrame(keyword_summary_df.to_dict()['Ranking Position'].tolist(), index=keyword_summary_df['URL']).reset_index()
+                keyword_summary_df.columns = ["URL", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
+                keyword_summary_df["total_search_volume_score"] = keyword_data_df.groupby("URL")["Search Volume"].sum().values
+
+                equity_data_df = equity_data_df.merge(keyword_summary_df, on="URL", how="left")
+
+                # Correct data formatting for keyword columns
+                for col in ["total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]:
+                    equity_data_df[col] = equity_data_df[col].apply(convert_to_numeric)
+
         # Adjusted weights mapping based on the dataset's columns -- add up to 100 points
         weights_mapping = {
             "Inlinks": 4,
@@ -102,7 +127,7 @@ def main():
             options=list(weights_mapping.keys()),
             default=list(weights_mapping.keys())
         )
-
+        
         # Correct data formatting for columns with numeric values
         columns_to_correct = [
             "total_search_volume_score",
@@ -147,50 +172,8 @@ def main():
         }
         equity_data_df["Action"] = equity_data_df["Recommendation"].map(action_mapping)
 
-        # Merge with keyword data if provided
-        if uploaded_keyword_file is not None:
-            keyword_data_df = pd.read_csv(uploaded_keyword_file)
-            required_keyword_columns = ["URL", "Keywords", "Search Volume", "Ranking Position"]
-            if all(col in keyword_data_df.columns for col in required_keyword_columns):
-                keyword_summary_df = keyword_data_df.groupby("URL").agg({
-                    "Search Volume": "sum",
-                    "Ranking Position": lambda x: {
-                        "Page 1": (x <= 10).sum(),
-                        "Page 2": ((x > 10) & (x <= 20)).sum(),
-                        "Page 3": ((x > 20) & (x <= 30)).sum()
-                    }
-                }).reset_index()
-
-                # Normalize the keyword summary data to correct column structure
-                keyword_summary_df = pd.DataFrame(keyword_summary_df.to_dict()['Ranking Position'].tolist(), index=keyword_summary_df['URL']).reset_index()
-                keyword_summary_df.columns = ["URL", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
-                keyword_summary_df["total_search_volume_score"] = keyword_data_df.groupby("URL")["Search Volume"].sum().values
-
-                equity_data_df = equity_data_df.merge(keyword_summary_df, on="URL", how="left")
-
-                # Correct data formatting for keyword columns
-                for col in ["total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]:
-                    equity_data_df[col] = equity_data_df[col].apply(convert_to_numeric)
-
-                # Recalculate the final weighted score with keyword data
-                for column in ["number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score", "total_search_volume_score"]:
-                    if column in columns_to_use and column in equity_data_df.columns:
-                        weight = weights_mapping.get(column.split("_score")[0], 0)
-                        equity_data_df[f"{column}_Weighted"] = equity_data_df
-                        equity_data_df[f"{column}_Weighted"] = equity_data_df[column] * weight
-
-                columns_for_final_score = [f"{col}_Weighted" for col in columns_to_use if col in equity_data_df.columns] + ["Trust_Ratio_Weighted"]
-                equity_data_df["Final_Weighted_Score"] = equity_data_df[columns_for_final_score].sum(axis=1)
-
-                # Reclassify based on the new scores
-                high_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.85)
-                medium_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.50)
-
-                equity_data_df["Recommendation"] = equity_data_df["Final_Weighted_Score"].apply(lambda x: classify_score(x, high_threshold, medium_threshold))
-                equity_data_df["Action"] = equity_data_df["Recommendation"].map(action_mapping)
-
         # Remove weighted score columns from the export
-        export_columns = [col for col in equity_data_df.columns if not col.endswith('_Weighted')]
+        export_columns = [col for col in equity_data_df.columns if not col.endswith('_Weighted') and col != "Final_Weighted_Score"]
         result_df = equity_data_df[export_columns]
 
         # Show the results
