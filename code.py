@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import base64
+import io
 
 # Check if openpyxl is installed
 try:
@@ -30,12 +31,14 @@ def classify_score(score, high_thresh, med_thresh):
         return "No value"
 
 @st.cache_data
-def get_excel_download_link(writer, filename):
-    """Generates a link to download the Excel file"""
-    writer.save()
-    writer.seek(0)
-    b64 = base64.b64encode(writer.getvalue()).decode()
-    href = f'<a href="data:file/xlsx;base64,{b64}" download="{filename}">Download Excel file</a>'
+def get_excel_download_link(df, filename):
+    """Generates a link to download the DataFrame as an Excel file."""
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Sheet1')
+    excel_data = output.getvalue()
+    b64 = base64.b64encode(excel_data).decode()
+    href = f'<a href="data:application/octet-stream;base64,{b64}" download="{filename}">Download Excel file</a>'
     return href
 
 def main():
@@ -75,13 +78,11 @@ def main():
         keyword_template_df = pd.DataFrame(columns=[
             "URL", "Keywords", "Search Volume", "Ranking Position"
         ])
-        import io
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             equity_template_df.to_excel(writer, sheet_name='Equity Data', index=False)
             keyword_template_df.to_excel(writer, sheet_name='Keyword Data', index=False)
-        
-        # Create download link for the Excel file
+        output.seek(0)
         st.markdown(get_excel_download_link(output, "equity_analysis_template.xlsx"), unsafe_allow_html=True)
 
     # Allow users to upload their XLSX file with equity and keyword data in separate tabs
@@ -212,8 +213,8 @@ def main():
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             result_df.to_excel(writer, index=False, sheet_name='Results')
-        
-        st.markdown(get_excel_download_link(output, "equity_analysis_results.xlsx"), unsafe_allow_html=True)
+        output.seek(0)
+        st.markdown(get_excel_download_link(result_df, "equity_analysis_results.xlsx"), unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
