@@ -47,7 +47,7 @@ def normalize(df, metric_cols):
             if max_val != min_val:
                 df_normalized[col] = (df[col] - min_val) / (max_val - min_val)
             else:
-                df_normalized[col] = df[col]  # if all values are the same, normalization isn't necessary
+                df_normalized[col] = 0  # if all values are the same, normalization isn't necessary
     return df_normalized
 
 def main():
@@ -77,7 +77,6 @@ def main():
     - Offer actionable recommendations for each URL based on their classification.
     """)
 
-    # Allow users to download a template XLSX file for equity and keyword analysis
     if st.button("Download Equity Analysis Template XLSX"):
         equity_template_df = pd.DataFrame(columns=[
             "URL", "status_code", "Inlinks", "backlinks", "referring_domains_score", "trust_flow_score", 
@@ -93,10 +92,8 @@ def main():
             keyword_template_df.to_excel(writer, sheet_name='Keyword Data', index=False)
         st.markdown(get_excel_download_link(output, "equity_analysis_template.xlsx"), unsafe_allow_html=True)
 
-    # Allow users to upload their XLSX file with equity and keyword data in separate tabs
     uploaded_file = st.file_uploader("Upload your XLSX file", type="xlsx")
 
-    # Column selection before running the analysis
     weights_mapping = {
         "Inlinks": 4,
         "backlinks": 7,
@@ -129,17 +126,14 @@ def main():
             st.error(f"Error reading sheets: {e}")
             return
 
-        # Normalize column names in equity and keyword data
         equity_data_df.columns = [col.strip().lower().replace(' ', '_') for col in equity_data_df.columns]
         keyword_data_df.columns = [col.strip().lower().replace(' ', '_') for col in keyword_data_df.columns]
 
-        # Ensure 'ranking_position' and 'search_volume' are numeric in keyword data
         keyword_data_df['ranking_position'] = pd.to_numeric(keyword_data_df['ranking_position'], errors='coerce')
         keyword_data_df['search_volume'] = pd.to_numeric(keyword_data_df['search_volume'], errors='coerce')
-        
+
         required_keyword_columns = ["url", "keywords", "search_volume", "ranking_position"]
         if all(col in keyword_data_df.columns for col in required_keyword_columns):
-            # Process keyword data to summarize
             keyword_summary_df = keyword_data_df.groupby("url").agg(
                 total_search_volume_score=("search_volume", "sum"),
                 number_of_keywords_page_1_score=("ranking_position", lambda x: (x <= 10).sum()),
@@ -151,13 +145,11 @@ def main():
             st.error("Keyword file is missing required columns: 'URL', 'Keywords', 'Search Volume', 'Ranking Position'")
 
         if 'url' in equity_data_df.columns and keyword_summary_df is not None and 'url' in keyword_summary_df.columns:
-            # Merge keyword summary data with equity data
             equity_data_df = equity_data_df.merge(keyword_summary_df, on="url", how="left")
             st.write("Merged DataFrame Preview:", equity_data_df.head(10))
         else:
             st.error("'url' column is missing in one of the uploaded sheets.")
 
-        # Correct data formatting for columns with numeric values
         columns_to_correct = [
             "total_search_volume_score",
             "number_of_keywords_page_1_score",
@@ -169,38 +161,41 @@ def main():
             if col in equity_data_df.columns:
                 equity_data_df[col] = equity_data_df[col].apply(convert_to_numeric)
 
-        # Normalize the data before weighting
         norm_data_df = normalize(equity_data_df.copy(), columns_to_use)
+        
+        # Debugging: Display normalized data
+        st.write("Normalized Data Preview:", norm_data_df.head(10))
 
-        # Calculating the weighted scores for each metric in the adjusted dataset
         weighted_scores_sum = pd.Series(np.zeros(len(norm_data_df)), index=norm_data_df.index)
         for column in columns_to_use:
             if column in norm_data_df.columns:
                 weight = weights_mapping[column]
                 weighted_scores_sum += norm_data_df[column] * weight
         
-        # Calculate Trust Ratio Score as trust_flow_score / citation_flow_score
+        # Debugging: Display weighted scores
+        st.write("Weighted Scores Sum Preview:", weighted_scores_sum.head(10))
+        
         if "trust_flow_score" in columns_to_use and "citation_flow_score" in columns_to_use:
             trust_ratio = (norm_data_df["trust_flow_score"] / norm_data_df["citation_flow_score"]).fillna(0) * 2
             weighted_scores_sum += trust_ratio
-
+        
         # Compute the final weighted score for each URL
         equity_data_df["Final_Weighted_Score"] = weighted_scores_sum
 
         # Debugging: Check the range of final weighted scores
         st.write("Final Weighted Score Stats:", equity_data_df["Final_Weighted_Score"].describe())
 
-        # Compute thresholds for classification
         high_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.85)
         medium_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.50)
 
-        # Apply classification
+        # Debugging: Output threshold values
+        st.write(f"High Threshold: {high_threshold}, Medium Threshold: {medium_threshold}")
+
         equity_data_df["Recommendation"] = equity_data_df["Final_Weighted_Score"].apply(lambda x: classify_score(x, high_threshold, medium_threshold))
 
-        # Debugging: Check classification distribution
-        st.write("Classification Distribution:", equity_data_df["Recommendation"].value_counts())
+        # Debugging: Check distribution of recommendations
+        st.write("Recommendation Distribution:", equity_data_df["Recommendation"].value_counts())
 
-        # Map the "Recommendation" to the corresponding action
         action_mapping = {
             "High": "Keep or Maintain 1:1 redirect",
             "Medium": "Update or consolidate content",
@@ -209,20 +204,16 @@ def main():
         }
         equity_data_df["Action"] = equity_data_df["Recommendation"].map(action_mapping)
 
-        # Ensure keyword columns are included in the output
         keyword_columns = ["total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
         for col in keyword_columns:
             if col in equity_data_df.columns and col not in columns_to_use:
                 columns_to_use.append(col)
         
-        # Columns to include in the final output
         export_columns = [col for col in equity_data_df.columns if col not in ("Final_Weighted_Score",)]
         result_df = equity_data_df[export_columns]
 
-        # Show the results
         st.write(result_df)
 
-        # Create a download link for the resulting DataFrame
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             result_df.to_excel(writer, index=False, sheet_name='Results')
