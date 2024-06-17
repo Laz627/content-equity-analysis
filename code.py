@@ -92,14 +92,6 @@ def main():
             keyword_template_df.to_excel(writer, sheet_name='Keyword Data', index=False)
         st.markdown(get_excel_download_link(output, "equity_analysis_template.xlsx"), unsafe_allow_html=True)
 
-columns_to_use = st.multiselect(
-    "Select columns to use in analysis (unselected columns will be omitted):",
-    options=list(weights_mapping.keys()),
-    default=list(weights_mapping.keys())
-    )
-    
-    uploaded_file = st.file_uploader("Upload your XLSX file", type="xlsx")
-
     weights_mapping = {
         "Inlinks": 4, "backlinks": 7, "referring_domains_score": 10, "trust_flow_score": 8,
         "citation_flow_score": 4, "gsc_clicks_score": 14, "gsc_impressions_score": 8,
@@ -108,6 +100,15 @@ columns_to_use = st.multiselect(
         "number_of_keywords_page_2_score": 8, "number_of_keywords_page_3_score": 6,
         "total_search_volume_score": 5
     }
+
+    columns_to_use = st.multiselect(
+        "Select columns to use in analysis (unselected columns will be omitted):",
+        options=list(weights_mapping.keys()),
+        default=list(weights_mapping.keys())
+    )
+
+    uploaded_file = st.file_uploader("Upload your XLSX file", type="xlsx")
+
 
     if uploaded_file is not None:
         with st.spinner('Processing your file...'):
