@@ -106,19 +106,37 @@ def main():
     keyword_summary_df = None
 
     if uploaded_keyword_file is not None:
+        # Try reading the file with different encodings
         encodings = ['utf-8', 'latin1', 'ISO-8859-1']
         for encoding in encodings:
             try:
-                keyword_data_df = pd.read_csv(uploaded_keyword_file, encoding=encoding)
+                raw_data = pd.read_csv(uploaded_keyword_file, encoding=encoding, header=None)
                 break
             except UnicodeDecodeError:
                 continue
-    
+
+        # Manually clean and parse the data
+        raw_data[0] = raw_data[0].astype(str).str.replace('ï»¿', '')
+        cleaned_records = []
+
+        for i in range(0, len(raw_data), 4):
+            if i + 3 < len(raw_data):
+                record = [
+                    raw_data.iloc[i, 1],
+                    raw_data.iloc[i+1, 1],
+                    raw_data.iloc[i+2, 1],
+                    raw_data.iloc[i+3, 1]
+                ]
+                cleaned_records.append(record)
+
+        # Convert cleaned records to DataFrame
+        keyword_data_df = pd.DataFrame(cleaned_records, columns=["url", "keywords", "search_volume", "ranking_position"])
+        
         # Normalize column names
         keyword_data_df.columns = [col.strip().lower().replace(' ', '_') for col in keyword_data_df.columns]
-    
+
         st.write("Columns in uploaded keyword file:", keyword_data_df.columns)
-    
+
         required_keyword_columns = ["url", "keywords", "search_volume", "ranking_position"]
         if all(col in keyword_data_df.columns for col in required_keyword_columns):
             keyword_summary_df = keyword_data_df.groupby("url").agg(
@@ -187,7 +205,7 @@ def main():
             if col in equity_data_df.columns:
                 columns_to_use.append(col)
         
-                # Remove weighted score columns from the export
+        # Remove weighted score columns from the export
         export_columns = [col for col in equity_data_df.columns if not col.endswith('_Weighted') and col != "Final_Weighted_Score"]
         result_df = equity_data_df[export_columns]
 
@@ -202,4 +220,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
