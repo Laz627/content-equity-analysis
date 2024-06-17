@@ -63,9 +63,7 @@ def main():
     if st.button("Download Equity Analysis Template CSV"):
         equity_template_df = pd.DataFrame(columns=[
             "URL", "status_code", "Inlinks", "backlinks", "referring_domains_score", "trust_flow_score", 
-            "citation_flow_score", "number_of_ranking_keywords_score", 
-            "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", 
-            "number_of_keywords_page_3_score", "gsc_clicks_score", "gsc_impressions_score", 
+            "citation_flow_score", "gsc_clicks_score", "gsc_impressions_score", 
             "unique_pageviews_organic_score", "unique_pageviews_all_traffic_score", "completed_goals_all_traffic_score"
         ])
         st.markdown(get_table_download_link(equity_template_df, "equity_analysis_template.csv"), unsafe_allow_html=True)
@@ -73,13 +71,13 @@ def main():
     # Allow users to download a template CSV file for keyword analysis
     if st.button("Download Keyword Template CSV"):
         keyword_template_df = pd.DataFrame(columns=[
-            "Keywords", "Search Volume", "Ranking Position"
+            "URL", "Keywords", "Search Volume", "Ranking Position"
         ])
         st.markdown(get_table_download_link(keyword_template_df, "keyword_template.csv"), unsafe_allow_html=True)
 
     # Allow users to upload their own CSV file
-    uploaded_file = st.file_uploader("Upload your CSV file", type="csv")
-    uploaded_keyword_file = st.file_uploader("Upload your keyword CSV file (Optional)", type="csv")
+    uploaded_file = st.file_uploader("Upload your Equity Analysis CSV file", type="csv")
+    uploaded_keyword_file = st.file_uploader("Upload your Keyword CSV file", type="csv")
 
     if uploaded_file is not None:
         equity_data_df = pd.read_csv(uploaded_file)
@@ -91,10 +89,6 @@ def main():
             "referring_domains_score": 10,
             "trust_flow_score": 8,
             "citation_flow_score": 4,
-            "number_of_ranking_keywords_score": 7,
-            "number_of_keywords_page_1_score": 12,
-            "number_of_keywords_page_2_score": 10,
-            "number_of_keywords_page_3_score": 8,
             "gsc_clicks_score": 14,
             "gsc_impressions_score": 8,
             "unique_pageviews_organic_score": 6,
@@ -154,6 +148,43 @@ def main():
         }
         equity_data_df["Action"] = equity_data_df["Recommendation"].map(action_mapping)
 
+        # Merge with keyword data if provided
+        if uploaded_keyword_file is not None:
+            keyword_data_df = pd.read_csv(uploaded_keyword_file)
+            required_keyword_columns = ["URL", "Keywords", "Search Volume", "Ranking Position"]
+            if all(col in keyword_data_df.columns for col in required_keyword_columns):
+                keyword_summary_df = keyword_data_df.groupby("URL").agg({
+                    "Search Volume": "sum",
+                    "Ranking Position": lambda x: {
+                        "Page 1": (x <= 10).sum(),
+                        "Page 2": ((x > 10) & (x <= 20)).sum(),
+                        "Page 3": ((x > 20) & (x <= 30)).sum()
+                    }
+                }).reset_index()
+
+                keyword_summary_df.columns = ["URL", "total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
+                equity_data_df = equity_data_df.merge(keyword_summary_df, on="URL", how="left")
+
+                # Correct data formatting for keyword columns
+                for col in ["total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]:
+                    equity_data_df[col] = equity_data_df[col].apply(convert_to_numeric)
+                    
+                # Recalculate the final weighted score with keyword data
+                for column in ["number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score", "total_search_volume_score"]:
+                    if column in columns_to_use and column in equity_data_df.columns:
+                        weight = weights_mapping.get(column.split("_score")[0], 0)
+                        equity_data_df[f"{column}_Weighted"] = equity_data_df[column] * weight
+
+                columns_for_final_score = [f"{col}_Weighted" for col in columns_to_use if col in equity_data_df.columns] + ["Trust_Ratio_Weighted"]
+                equity_data_df["Final_Weighted_Score"] = equity_data_df[columns_for_final_score].sum(axis=1)
+
+                # Reclassify based on the new scores
+                high_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.85)
+                medium_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.50)
+
+                equity_data_df["Recommendation"] = equity_data_df["Final_Weighted_Score"].apply(lambda x: classify_score(x, high_threshold, medium_threshold))
+                equity_data_df["Action"] = equity_data_df["Recommendation"].map(action_mapping)
+
         # Remove weighted score columns from the export
         export_columns = [col for col in equity_data_df.columns if not col.endswith('_Weighted')]
         result_df = equity_data_df[export_columns]
@@ -164,27 +195,8 @@ def main():
         # Allow users to download the resulting DataFrame
         st.markdown(get_table_download_link(result_df, "equity_analysis_results.csv"), unsafe_allow_html=True)
 
-    if uploaded_keyword_file is not None:
-        keyword_data_df = pd.read_csv(uploaded_keyword_file)
-
-        # Ensure the required columns are present
-        required_keyword_columns = ["Keywords", "Search Volume", "Ranking Position"]
-        if all(col in keyword_data_df.columns for col in required_keyword_columns):
-            # Compute total keywords, total search volume, and keywords by ranking position
-            total_keywords = keyword_data_df.shape[0]
-            total_search_volume = keyword_data_df['Search Volume'].sum()
-            page_1_keywords = keyword_data_df[keyword_data_df['Ranking Position'] <= 10].shape[0]
-            page_2_keywords = keyword_data_df[(keyword_data_df['Ranking Position'] > 10) & (keyword_data_df['Ranking Position'] <= 20)].shape[0]
-            page_3_keywords = keyword_data_df[(keyword_data_df['Ranking Position'] > 20) & (keyword_data_df['Ranking Position'] <= 30)].shape[0]
-
-            st.write(f"Total Keywords: {total_keywords}")
-            st.write(f"Total Search Volume: {total_search_volume}")
-            st.write(f"Keywords on Page 1: {page_1_keywords}")
-            st.write(f"Keywords on Page 2: {page_2_keywords}")
-            st.write(f"Keywords on Page 3: {page_3_keywords}")
-        else:
-            st.error("The keyword CSV file must include the columns: Keywords, Search Volume, and Ranking Position")
+    if uploaded_keyword_file is not None and uploaded_file is None:
+        st.error("Please upload the Equity Analysis CSV file first.")
 
 if __name__ == "__main__":
     main()
-
