@@ -105,7 +105,6 @@ def main():
         
         # Correct data formatting for columns with numeric values
         columns_to_correct = [
-            "number_of_ranking_keywords_score",
             "total_search_volume_score",
             "number_of_keywords_page_1_score",
             "number_of_keywords_page_2_score",
@@ -162,13 +161,14 @@ def main():
                     }
                 }).reset_index()
 
+                keyword_summary_df = keyword_summary_df.explode("Ranking Position").reset_index(drop=True)
                 keyword_summary_df.columns = ["URL", "total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
                 equity_data_df = equity_data_df.merge(keyword_summary_df, on="URL", how="left")
 
                 # Correct data formatting for keyword columns
                 for col in ["total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]:
                     equity_data_df[col] = equity_data_df[col].apply(convert_to_numeric)
-                    
+
                 # Recalculate the final weighted score with keyword data
                 for column in ["number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score", "total_search_volume_score"]:
                     if column in columns_to_use and column in equity_data_df.columns:
