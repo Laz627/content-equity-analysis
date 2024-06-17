@@ -49,9 +49,9 @@ def main():
     - Optionally, analyze and display keyword ranking metrics if a keyword file is provided.
     """)
 
-    # Allow users to download a template CSV file
-    if st.button("Download Template CSV"):
-        template_df = pd.DataFrame(columns=[
+    # Allow users to download a template CSV file for equity analysis
+    if st.button("Download Equity Analysis Template CSV"):
+        equity_template_df = pd.DataFrame(columns=[
             "URL", "Inlinks", "backlinks", "referring_domains_score", "trust_flow_score", 
             "citation_flow_score", "number_of_ranking_keywords_score", 
             "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", 
@@ -59,8 +59,16 @@ def main():
             "internal_links_score", "unique_pageviews_organic_score", 
             "unique_pageviews_all_traffic_score", "completed_goals_all_traffic_score"
         ])
-        template_df.to_csv("equity_analysis_template.csv", index=False)
-        st.markdown(get_table_download_link(template_df), unsafe_allow_html=True)
+        equity_template_df.to_csv("equity_analysis_template.csv", index=False)
+        st.markdown(get_table_download_link(equity_template_df, "equity_analysis_template.csv"), unsafe_allow_html=True)
+
+    # Allow users to download a template CSV file for keyword analysis
+    if st.button("Download Keyword Template CSV"):
+        keyword_template_df = pd.DataFrame(columns=[
+            "Keywords", "Search Volume", "Ranking Position"
+        ])
+        keyword_template_df.to_csv("keyword_template.csv", index=False)
+        st.markdown(get_table_download_link(keyword_template_df, "keyword_template.csv"), unsafe_allow_html=True)
 
     # Allow users to upload their own CSV file
     uploaded_file = st.file_uploader("Upload your CSV file", type="csv")
@@ -148,7 +156,7 @@ def main():
         st.write(result_df)
 
         # Allow users to download the resulting DataFrame
-        st.markdown(get_table_download_link(result_df), unsafe_allow_html=True)
+        st.markdown(get_table_download_link(result_df, "equity_analysis_results.csv"), unsafe_allow_html=True)
 
     if uploaded_keyword_file is not None:
         keyword_data_df = pd.read_csv(uploaded_keyword_file)
@@ -171,13 +179,14 @@ def main():
         else:
             st.error("The keyword CSV file must include the columns: Keywords, Search Volume, and Ranking Position")
 
-def get_table_download_link(df):
+def get_table_download_link(df, filename):
     """Generates a link to download the DataFrame as a CSV file."""
     import base64
     csv = df.to_csv(index=False)
     b64 = base64.b64encode(csv.encode()).decode()
-    href = f'<a href="data:file/csv;base64,{b64}" download="equity_analysis_results.csv">Download CSV file</a>'
+    href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">Download CSV file</a>'
     return href
-
+    
 if __name__ == "__main__":
     main()
+
