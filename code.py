@@ -177,7 +177,7 @@ def main():
         # Ensure keyword columns are included in the output
         keyword_columns = ["total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
         for col in keyword_columns:
-            if col in equity_data_df.columns and col not in columns_to_use:
+            if col in equity_data_df.columns:
                 columns_to_use.append(col)
         
         # Remove weighted score columns from the export
@@ -190,7 +190,7 @@ def main():
         # Allow users to download the resulting DataFrame
         st.markdown(get_table_download_link(result_df, "equity_analysis_results.csv"), unsafe_allow_html=True)
 
-    if uploaded_keyword_file is not None and uploaded_file is None:
+    if uploaded_keyword_file is None and uploaded_file is None:
         st.error("Please upload the Equity Analysis CSV file first.")
 
 if __name__ == "__main__":
