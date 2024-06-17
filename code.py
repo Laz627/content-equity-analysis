@@ -75,11 +75,7 @@ def main():
     - Optionally, analyze and display keyword ranking metrics if a keyword file is provided.
     """)
 
-    # Allow users to upload their keyword CSV file first
-    uploaded_keyword_file = st.file_uploader("Upload your Keyword CSV file", type="csv")
-    uploaded_file = st.file_uploader("Upload your Equity Analysis CSV file", type="csv")
-
-    # Column selection before running the analysis
+   # Column selection before running the analysis
     weights_mapping = {
         "Inlinks": 4,
         "backlinks": 7,
@@ -102,6 +98,10 @@ def main():
         options=list(weights_mapping.keys()),
         default=list(weights_mapping.keys())
     )
+    
+    # Allow users to upload their keyword CSV file first
+    uploaded_keyword_file = st.file_uploader("Upload your Keyword CSV file", type="csv")
+    uploaded_file = st.file_uploader("Upload your Equity Analysis CSV file", type="csv")
 
     keyword_summary_df = None
 
