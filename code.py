@@ -1,6 +1,14 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import base64
+
+# Check if openpyxl is installed
+try:
+    import openpyxl
+except ImportError:
+    st.error("The openpyxl library is required to handle Excel files. Please install it using: `pip install openpyxl`")
+    st.stop()
 
 @st.cache_data
 def convert_to_numeric(value):
@@ -22,12 +30,12 @@ def classify_score(score, high_thresh, med_thresh):
         return "No value"
 
 @st.cache_data
-def get_table_download_link(df, filename):
-    """Generates a link to download the DataFrame as a CSV file."""
-    import base64
-    csv = df.to_csv(index=False)
-    b64 = base64.b64encode(csv.encode()).decode()
-    href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">Download CSV file</a>'
+def get_excel_download_link(writer, filename):
+    """Generates a link to download the Excel file"""
+    writer.save()
+    writer.seek(0)
+    b64 = base64.b64encode(writer.getvalue()).decode()
+    href = f'<a href="data:file/xlsx;base64,{b64}" download="{filename}">Download Excel file</a>'
     return href
 
 def main():
@@ -67,10 +75,14 @@ def main():
         keyword_template_df = pd.DataFrame(columns=[
             "URL", "Keywords", "Search Volume", "Ranking Position"
         ])
-        with pd.ExcelWriter("equity_analysis_template.xlsx") as writer:
+        import io
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
             equity_template_df.to_excel(writer, sheet_name='Equity Data', index=False)
             keyword_template_df.to_excel(writer, sheet_name='Keyword Data', index=False)
-        st.markdown(get_table_download_link(pd.DataFrame(), "equity_analysis_template.xlsx"), unsafe_allow_html=True)
+        
+        # Create download link for the Excel file
+        st.markdown(get_excel_download_link(output, "equity_analysis_template.xlsx"), unsafe_allow_html=True)
 
     # Allow users to upload their XLSX file with equity and keyword data in separate tabs
     uploaded_file = st.file_uploader("Upload your XLSX file", type="xlsx")
@@ -196,8 +208,12 @@ def main():
         # Show the results
         st.write(result_df)
 
-        # Allow users to download the resulting DataFrame
-        st.markdown(get_table_download_link(result_df, "equity_analysis_results.csv"), unsafe_allow_html=True)
+        # Create a download link for the resulting DataFrame
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            result_df.to_excel(writer, index=False, sheet_name='Results')
+        
+        st.markdown(get_excel_download_link(output, "equity_analysis_results.xlsx"), unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
