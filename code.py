@@ -44,9 +44,9 @@ def main():
 
     st.header("How to Use It")
     st.write("""
-    1. **Download the Template**: Click the 'Download Equity Analysis Template CSV' or 'Download Keyword Template CSV' buttons to download template files with the required columns.
-    2. **Upload Your Data**: Use the 'Upload your CSV file' button to upload your equity analysis data. Optionally, upload a keyword data file using 'Upload your keyword CSV file' for additional keyword analysis.
-    3. **Select Columns**: Choose which columns to include in the analysis from the multiselect dropdown.
+    1. **Download the Template**: Click the 'Download Equity Analysis Template CSV' and 'Download Keyword Template CSV' buttons to download template files with the required columns.
+    2. **Upload Your Data**: Use the 'Upload your CSV file' button to upload your keyword data and your equity analysis data. The keyword data file should be uploaded first.
+    3. **Select Columns**: Choose which columns to include in the analysis from the multiselect dropdown below.
     4. **View Results**: The app will display the analyzed results and provide a download link for the final output file.
     """)
 
