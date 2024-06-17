@@ -47,7 +47,7 @@ def normalize(df, metric_cols):
             if max_val != min_val:
                 df_normalized[col] = (df[col] - min_val) / (max_val - min_val)
             else:
-                df_normalized[col] = 0  # if all values are the same, normalization isn't necessary
+                df_normalized[col] = 0
     return df_normalized
 
 def main():
@@ -119,7 +119,6 @@ def main():
 
     if uploaded_file is not None:
         try:
-            # Reading data and keywords from the XLSX file
             equity_data_df = pd.read_excel(uploaded_file, sheet_name='Equity Data')
             keyword_data_df = pd.read_excel(uploaded_file, sheet_name='Keyword Data')
         except Exception as e:
@@ -167,37 +166,39 @@ def main():
 
         norm_data_df = normalize(equity_data_df.copy(), columns_to_use)
 
-        # Debugging: Display normalized data
-        st.write("Normalized Data Preview:", norm_data_df.head(10))
+        st.write("Normalize Columns:")
+        for col in columns_to_use:
+            if col in norm_data_df.columns:
+                st.write(f"{col}: min={norm_data_df[col].min()}, max={norm_data_df[col].max()}, mean={norm_data_df[col].mean()}")
 
         weighted_scores_sum = pd.Series(np.zeros(len(norm_data_df)), index=norm_data_df.index)
         for column in columns_to_use:
             if column in norm_data_df.columns:
                 weight = weights_mapping[column]
-                weighted_scores_sum += norm_data_df[column] * weight
-                
-        # Debugging: Display weighted scores
-        st.write("Weighted Scores Sum Preview:", weighted_scores_sum.head(10))
-        
+                weighted_sum = norm_data_df[column] * weight
+                st.write(f"Weighted Score for {column} (first 10 rows):")
+                st.write(weighted_sum.head(10))
+                weighted_scores_sum += weighted_sum
+
+        st.write("Weighted Scores Sum Preview First 10 Rows:", weighted_scores_sum.head(10))
+
         if "trust_flow_score" in columns_to_use and "citation_flow_score" in columns_to_use:
             trust_ratio = (norm_data_df["trust_flow_score"] / norm_data_df["citation_flow_score"]).fillna(0) * 2
+            st.write("Trust Ratio Weighted First 10 Rows:", trust_ratio.head(10))
             weighted_scores_sum += trust_ratio
-        
-        # Compute the final weighted score for each URL
+
         equity_data_df["Final_Weighted_Score"] = weighted_scores_sum
 
-        # Debugging: Check the range of final weighted scores
         st.write("Final Weighted Score Stats:", equity_data_df["Final_Weighted_Score"].describe())
+        st.write("Final Weighted Score First 10 Rows:", equity_data_df["Final_Weighted_Score"].head(10))
 
         high_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.85)
         medium_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.50)
 
-        # Debugging: Output threshold values
         st.write(f"High Threshold: {high_threshold}, Medium Threshold: {medium_threshold}")
 
         equity_data_df["Recommendation"] = equity_data_df["Final_Weighted_Score"].apply(lambda x: classify_score(x, high_threshold, medium_threshold))
 
-        # Debugging: Check distribution of recommendations
         st.write("Recommendation Distribution:", equity_data_df["Recommendation"].value_counts())
 
         action_mapping = {
