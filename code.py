@@ -114,15 +114,18 @@ def main():
             except UnicodeDecodeError:
                 continue
         
+        # Normalize column names
+        keyword_data_df.columns = [col.strip().lower().replace(' ', '_') for col in keyword_data_df.columns]
+
         st.write("Columns in uploaded keyword file:", keyword_data_df.columns)
 
-        required_keyword_columns = ["URL", "Keywords", "Search Volume", "Ranking Position"]
+        required_keyword_columns = ["url", "keywords", "search_volume", "ranking_position"]
         if all(col in keyword_data_df.columns for col in required_keyword_columns):
-            keyword_summary_df = keyword_data_df.groupby("URL").agg(
-                total_search_volume_score=("Search Volume", "sum"),
-                number_of_keywords_page_1_score=("Ranking Position", lambda x: (x <= 10).sum()),
-                number_of_keywords_page_2_score=("Ranking Position", lambda x: ((x > 10) & (x <= 20)).sum()),
-                number_of_keywords_page_3_score=("Ranking Position", lambda x: ((x > 20) & (x <= 30)).sum())
+            keyword_summary_df = keyword_data_df.groupby("url").agg(
+                total_search_volume_score=("search_volume", "sum"),
+                number_of_keywords_page_1_score=("ranking_position", lambda x: (x <= 10).sum()),
+                number_of_keywords_page_2_score=("ranking_position", lambda x: ((x > 10) & (x <= 20)).sum()),
+                number_of_keywords_page_3_score=("ranking_position", lambda x: ((x > 20) & (x <= 30)).sum())
             ).reset_index()
         else:
             st.error("Keyword file is missing required columns: 'URL', 'Keywords', 'Search Volume', 'Ranking Position'")
@@ -132,7 +135,7 @@ def main():
 
         if keyword_summary_df is not None:
             # Merge keyword summary data with equity data
-            equity_data_df = equity_data_df.merge(keyword_summary_df, on="URL", how="left")
+            equity_data_df = equity_data_df.merge(keyword_summary_df, on="url", how="left")
 
         # Correct data formatting for columns with numeric values
         columns_to_correct = [
@@ -184,7 +187,7 @@ def main():
             if col in equity_data_df.columns:
                 columns_to_use.append(col)
         
-        # Remove weighted score columns from the export
+                # Remove weighted score columns from the export
         export_columns = [col for col in equity_data_df.columns if not col.endswith('_Weighted') and col != "Final_Weighted_Score"]
         result_df = equity_data_df[export_columns]
 
@@ -199,3 +202,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
