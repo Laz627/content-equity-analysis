@@ -129,6 +129,10 @@ def main():
         equity_data_df.columns = [col.strip().lower().replace(' ', '_') for col in equity_data_df.columns]
         keyword_data_df.columns = [col.strip().lower().replace(' ', '_') for col in keyword_data_df.columns]
 
+        # Fill N/A values with 0
+        equity_data_df = equity_data_df.fillna(0)
+        keyword_data_df = keyword_data_df.fillna(0)
+
         keyword_data_df['ranking_position'] = pd.to_numeric(keyword_data_df['ranking_position'], errors='coerce')
         keyword_data_df['search_volume'] = pd.to_numeric(keyword_data_df['search_volume'], errors='coerce')
 
@@ -162,7 +166,7 @@ def main():
                 equity_data_df[col] = equity_data_df[col].apply(convert_to_numeric)
 
         norm_data_df = normalize(equity_data_df.copy(), columns_to_use)
-        
+
         # Debugging: Display normalized data
         st.write("Normalized Data Preview:", norm_data_df.head(10))
 
@@ -171,7 +175,7 @@ def main():
             if column in norm_data_df.columns:
                 weight = weights_mapping[column]
                 weighted_scores_sum += norm_data_df[column] * weight
-        
+                
         # Debugging: Display weighted scores
         st.write("Weighted Scores Sum Preview:", weighted_scores_sum.head(10))
         
