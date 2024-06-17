@@ -50,18 +50,6 @@ def normalize(df, metric_cols):
                 df_normalized[col] = 0
     return df_normalized
 
-def check_zero_rows(df, metric_cols):
-    """Check which rows are entirely zero for specified columns."""
-    valid_metric_cols = [col for col in metric_cols if col in df.columns]
-    mask = (df[valid_metric_cols] == 0).all(axis=1)
-    return df[mask]
-
-def check_non_zero_rows(df, metric_cols):
-    """Check which rows have non-zero values for specified columns."""
-    valid_metric_cols = [col for col in metric_cols if col in df.columns]
-    mask = (df[valid_metric_cols] > 0).any(axis=1)
-    return df[mask]
-
 def main():
     st.title("Equity Analysis Calculator")
     st.write("**Created by: Brandon Lazovic**")
@@ -104,6 +92,12 @@ def main():
             keyword_template_df.to_excel(writer, sheet_name='Keyword Data', index=False)
         st.markdown(get_excel_download_link(output, "equity_analysis_template.xlsx"), unsafe_allow_html=True)
 
+   columns_to_use = st.multiselect(
+        "Select columns to use in analysis (unselected columns will be omitted):",
+        options=list(weights_mapping.keys()),
+        default=list(weights_mapping.keys())
+    )
+    
     uploaded_file = st.file_uploader("Upload your XLSX file", type="xlsx")
 
     weights_mapping = {
@@ -115,132 +109,101 @@ def main():
         "total_search_volume_score": 5
     }
 
-    columns_to_use = st.multiselect(
-        "Select columns to use in analysis (unselected columns will be omitted):",
-        options=list(weights_mapping.keys()),
-        default=list(weights_mapping.keys())
-    )
-
     if uploaded_file is not None:
-        try:
-            equity_data_df = pd.read_excel(uploaded_file, sheet_name='Equity Data')
-            keyword_data_df = pd.read_excel(uploaded_file, sheet_name='Keyword Data')
-        except Exception as e:
-            st.error(f"Error reading sheets: {e}")
-            return
+        with st.spinner('Processing your file...'):
+            try:
+                equity_data_df = pd.read_excel(uploaded_file, sheet_name='Equity Data')
+                keyword_data_df = pd.read_excel(uploaded_file, sheet_name='Keyword Data')
+            except Exception as e:
+                st.error(f"Error reading sheets: {e}")
+                return
 
-        equity_data_df.columns = [col.strip().lower().replace(' ', '_') for col in equity_data_df.columns]
-        keyword_data_df.columns = [col.strip().lower().replace(' ', '_') for col in keyword_data_df.columns]
+            equity_data_df.columns = [col.strip().lower().replace(' ', '_') for col in equity_data_df.columns]
+            keyword_data_df.columns = [col.strip().lower().replace(' ', '_') for col in keyword_data_df.columns]
 
-        # Fill N/A values with 0 in both dataframes
-        equity_data_df = equity_data_df.fillna(0)
-        keyword_data_df = keyword_data_df.fillna(0)
+            # Fill N/A values with 0 in both dataframes
+            equity_data_df = equity_data_df.fillna(0)
+            keyword_data_df = keyword_data_df.fillna(0)
 
-        # Ensure 'citation_flow_score' has no zero values to avoid division errors
-        equity_data_df['citation_flow_score'] = np.where(equity_data_df['citation_flow_score'] == 0, 0.01, equity_data_df['citation_flow_score'])
+            # Ensure 'citation_flow_score' has no zero values to avoid division errors
+            equity_data_df['citation_flow_score'] = np.where(equity_data_df['citation_flow_score'] == 0, 0.01, equity_data_df['citation_flow_score'])
 
-        analysis_cols_to_numeric = columns_to_use + ["total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
-        for col in analysis_cols_to_numeric:
-            if col in equity_data_df.columns:
-                equity_data_df[col] = equity_data_df[col].apply(convert_to_numeric)
+            analysis_cols_to_numeric = columns_to_use + ["total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
+            for col in analysis_cols_to_numeric:
+                if col in equity_data_df.columns:
+                    equity_data_df[col] = equity_data_df[col].apply(convert_to_numeric)
 
-        keyword_data_df['ranking_position'] = pd.to_numeric(keyword_data_df['ranking_position'], errors='coerce')
-        keyword_data_df['search_volume'] = pd.to_numeric(keyword_data_df['search_volume'], errors='coerce')
+            keyword_data_df['ranking_position'] = pd.to_numeric(keyword_data_df['ranking_position'], errors='coerce')
+            keyword_data_df['search_volume'] = pd.to_numeric(keyword_data_df['search_volume'], errors='coerce')
 
-        required_keyword_columns = ["url", "keywords", "search_volume", "ranking_position"]
-        if all(col in keyword_data_df.columns for col in required_keyword_columns):
-            keyword_summary_df = keyword_data_df.groupby("url").agg(
-                total_search_volume_score=("search_volume", "sum"),
-                number_of_keywords_page_1_score=("ranking_position", lambda x: (x <= 10).sum()),
-                number_of_keywords_page_2_score=("ranking_position", lambda x: ((x > 10) & (x <= 20)).sum()),
-                number_of_keywords_page_3_score=("ranking_position", lambda x: ((x > 20) & (x <= 30)).sum())
-            ).reset_index()
-            
-            # Fill keyword_summary_df with 0 to ensure no empty values
-            keyword_summary_df = keyword_summary_df.fillna(0)
-            st.write("Keyword Summary DataFrame Preview:", keyword_summary_df.head(10))
-        else:
-            st.error("Keyword file is missing required columns: 'URL', 'Keywords', 'Search Volume', 'Ranking Position'")
-
-        if 'url' in equity_data_df.columns and keyword_summary_df is not None and 'url' in keyword_summary_df.columns:
-            equity_data_df = equity_data_df.merge(keyword_summary_df, on="url", how="left")
-            st.write("Merged DataFrame Preview:", equity_data_df.head(10))
-        else:
-            st.error("'url' column is missing in one of the uploaded sheets.")
-
-        # Ensure no blank cells in equity_data_df after the merge.
-        equity_data_df = equity_data_df.fillna(0)
-
-        norm_data_df = normalize(equity_data_df.copy(), columns_to_use)
-
-        st.write("Normalized Columns Stats:")
-        for col in columns_to_use:
-            if col in norm_data_df.columns:
-                st.write(f"{col}: min={norm_data_df[col].min()}, max={norm_data_df[col].max()}, mean={norm_data_df[col].mean()}")
-
-        weighted_scores_sum = pd.Series(np.zeros(len(norm_data_df)), index=norm_data_df.index)
-        for column in columns_to_use:
-            if column in norm_data_df.columns:
-                weight = weights_mapping[column]
-                weighted_sum = norm_data_df[column] * weight
-                st.write(f"Weighted Score for {column} (first 10 rows):")
-                st.write(weighted_sum.head(10))
-                weighted_scores_sum += weighted_sum
-
-        st.write("Weighted Scores Sum Preview First 10 Rows:", weighted_scores_sum.head(10))
-
-        # Trust ratio calculation handling zero citation_flow_score
-        if "trust_flow_score" in columns_to_use and "citation_flow_score" in columns_to_use:
-            if (norm_data_df["citation_flow_score"] != 0).all():
-                trust_ratio = (norm_data_df["trust_flow_score"] / norm_data_df["citation_flow_score"]).fillna(0) * 2
+            required_keyword_columns = ["url", "keywords", "search_volume", "ranking_position"]
+            if all(col in keyword_data_df.columns for col in required_keyword_columns):
+                keyword_summary_df = keyword_data_df.groupby("url").agg(
+                    total_search_volume_score=("search_volume", "sum"),
+                    number_of_keywords_page_1_score=("ranking_position", lambda x: (x <= 10).sum()),
+                    number_of_keywords_page_2_score=("ranking_position", lambda x: ((x > 10) & (x <= 20)).sum()),
+                    number_of_keywords_page_3_score=("ranking_position", lambda x: ((x > 20) & (x <= 30)).sum())
+                ).reset_index()
+                keyword_summary_df = keyword_summary_df.fillna(0)
             else:
-                trust_ratio = pd.Series(np.zeros(len(norm_data_df)), index=norm_data_df.index)
-            st.write("Trust Ratio Weighted First 10 Rows:", trust_ratio.head(10))
-            weighted_scores_sum += trust_ratio
+                st.error("Keyword file is missing required columns: 'URL', 'Keywords', 'Search Volume', 'Ranking Position'")
+                return
 
-        equity_data_df["Final_Weighted_Score"] = weighted_scores_sum
+            if 'url' in equity_data_df.columns and keyword_summary_df is not None and 'url' in keyword_summary_df.columns:
+                equity_data_df = equity_data_df.merge(keyword_summary_df, on="url", how="left")
+            else:
+                st.error("'url' column is missing in one of the uploaded sheets.")
+                return
 
-        st.write("Final Weighted Score Stats:", equity_data_df["Final_Weighted_Score"].describe())
-        st.write("Final Weighted Score First 10 Rows:", equity_data_df["Final_Weighted_Score"].head(10))
+            equity_data_df = equity_data_df.fillna(0)
 
-        high_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.85)
-        medium_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.50)
+            norm_data_df = normalize(equity_data_df.copy(), columns_to_use)
 
-        st.write(f"High Threshold: {high_threshold}, Medium Threshold: {medium_threshold}")
-        
-        # Additional debugging: Check rows with absolute zero values
-        zero_value_rows = check_zero_rows(equity_data_df, columns_to_use)
-        non_zero_value_rows = check_non_zero_rows(equity_data_df, columns_to_use)
-        
-        st.write("Rows with All Zero Values in Metric Columns:", zero_value_rows.shape[0])
-        st.write("Rows with Some Non-Zero Values in Metric Columns:", non_zero_value_rows.shape[0])
+            weighted_scores_sum = pd.Series(np.zeros(len(norm_data_df)), index=norm_data_df.index)
+            for column in columns_to_use:
+                if column in norm_data_df.columns:
+                    weight = weights_mapping[column]
+                    weighted_sum = norm_data_df[column] * weight
+                    weighted_scores_sum += weighted_sum
 
-        equity_data_df["Recommendation"] = equity_data_df["Final_Weighted_Score"].apply(
-            lambda x: classify_score(x, high_threshold, medium_threshold)
-        )
+            if "trust_flow_score" in columns_to_use and "citation_flow_score" in columns_to_use:
+                if (norm_data_df["citation_flow_score"] != 0).all():
+                    trust_ratio = (norm_data_df["trust_flow_score"] / norm_data_df["citation_flow_score"]).fillna(0) * 2
+                else:
+                    trust_ratio = pd.Series(np.zeros(len(norm_data_df)), index=norm_data_df.index)
+                weighted_scores_sum += trust_ratio
 
-        st.write("Recommendation Distribution:", equity_data_df["Recommendation"].value_counts())
+            equity_data_df["Final_Weighted_Score"] = weighted_scores_sum
 
-        action_mapping = {
-            "High": "Keep or Maintain 1:1 redirect",
-            "Medium": "Update or consolidate content",
-            "Low": "Evaluate URL priority or deprecate",
-            "No value": "Do not keep or migrate"
-        }
-        equity_data_df["Action"] = equity_data_df["Recommendation"].map(action_mapping)
+            high_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.85)
+            medium_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.50)
 
-        keyword_columns = ["total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
-        for col in keyword_columns:
-            if col in equity_data_df.columns and col not in columns_to_use:
-                columns_to_use.append(col)
-        
-        # Validate export columns exist in the DataFrame.
-        export_columns = [col for col in equity_data_df.columns if col in equity_data_df and col not in ("Final_Weighted_Score",)]
-        result_df = equity_data_df[export_columns]
+            equity_data_df["Recommendation"] = equity_data_df["Final_Weighted_Score"].apply(
+                lambda x: classify_score(x, high_threshold, medium_threshold)
+            )
 
-        # Ensure no blank cells by filling result_df with 0s where necessary
-        result_df = result_df.fillna(0)
+            action_mapping = {
+                "High": "Keep or Maintain 1:1 redirect",
+                "Medium": "Update or consolidate content",
+                "Low": "Evaluate URL priority or deprecate",
+                "No value": "Do not keep or migrate"
+            }
+            equity_data_df["Action"] = equity_data_df["Recommendation"].map(action_mapping)
 
+            keyword_columns = ["total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
+            for col in keyword_columns:
+                if col in equity_data_df.columns and col not in columns_to_use:
+                    columns_to_use.append(col)
+
+            export_columns = [col for col in equity_data_df.columns if col in equity_data_df and col not in ("Final_Weighted_Score",)]
+            result_df = equity_data_df[export_columns]
+
+            result_df = result_df.fillna(0)
+
+        st.write("Classification Distribution:")
+        st.write(equity_data_df["Recommendation"].value_counts())
+
+        st.write("Detailed URL Table:")
         st.write(result_df)
 
         output = io.BytesIO()
