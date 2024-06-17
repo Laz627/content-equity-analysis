@@ -50,15 +50,6 @@ def main():
     4. **View Results**: The app will display the analyzed results and provide a download link for the final output file.
     """)
 
-    st.header("Expected Outcomes")
-    st.write("""
-    After processing the data, the tool will:
-    - Provide a weighted score for each URL based on the selected metrics.
-    - Classify URLs into High, Medium, Low, or No value categories.
-    - Offer actionable recommendations for each URL based on their classification.
-    - Optionally, analyze and display keyword ranking metrics if a keyword file is provided.
-    """)
-
     # Allow users to download a template CSV file for equity analysis
     if st.button("Download Equity Analysis Template CSV"):
         equity_template_df = pd.DataFrame(columns=[
@@ -74,6 +65,15 @@ def main():
             "URL", "Keywords", "Search Volume", "Ranking Position"
         ])
         st.markdown(get_table_download_link(keyword_template_df, "keyword_template.csv"), unsafe_allow_html=True)
+
+    st.header("Expected Outcomes")
+    st.write("""
+    After processing the data, the tool will:
+    - Provide a weighted score for each URL based on the selected metrics.
+    - Classify URLs into High, Medium, Low, or No value categories.
+    - Offer actionable recommendations for each URL based on their classification.
+    - Optionally, analyze and display keyword ranking metrics if a keyword file is provided.
+    """)
 
     # Allow users to upload their keyword CSV file first
     uploaded_keyword_file = st.file_uploader("Upload your Keyword CSV file", type="csv")
