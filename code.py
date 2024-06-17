@@ -102,7 +102,7 @@ def main():
             options=list(weights_mapping.keys()),
             default=list(weights_mapping.keys())
         )
-        
+
         # Correct data formatting for columns with numeric values
         columns_to_correct = [
             "total_search_volume_score",
@@ -161,8 +161,11 @@ def main():
                     }
                 }).reset_index()
 
-                keyword_summary_df = keyword_summary_df.explode("Ranking Position").reset_index(drop=True)
-                keyword_summary_df.columns = ["URL", "total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
+                # Normalize the keyword summary data to correct column structure
+                keyword_summary_df = pd.DataFrame(keyword_summary_df.to_dict()['Ranking Position'].tolist(), index=keyword_summary_df['URL']).reset_index()
+                keyword_summary_df.columns = ["URL", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
+                keyword_summary_df["total_search_volume_score"] = keyword_data_df.groupby("URL")["Search Volume"].sum().values
+
                 equity_data_df = equity_data_df.merge(keyword_summary_df, on="URL", how="left")
 
                 # Correct data formatting for keyword columns
@@ -173,6 +176,7 @@ def main():
                 for column in ["number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score", "total_search_volume_score"]:
                     if column in columns_to_use and column in equity_data_df.columns:
                         weight = weights_mapping.get(column.split("_score")[0], 0)
+                        equity_data_df[f"{column}_Weighted"] = equity_data_df
                         equity_data_df[f"{column}_Weighted"] = equity_data_df[column] * weight
 
                 columns_for_final_score = [f"{col}_Weighted" for col in columns_to_use if col in equity_data_df.columns] + ["Trust_Ratio_Weighted"]
