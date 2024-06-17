@@ -37,6 +37,16 @@ def get_excel_download_link(output, filename):
     href = f'<a href="data:application/octet-stream;base64,{b64}" download="{filename}">Download Excel file</a>'
     return href
 
+def normalize(df, metric_cols):
+    """Normalize the specified columns in the DataFrame using Min-Max normalization."""
+    df_normalized = df.copy()
+    for col in metric_cols:
+        if col in df.columns:
+            min_val = df[col].min()
+            max_val = df[col].max()
+            df_normalized[col] = (df[col] - min_val) / (max_val - min_val)
+    return df_normalized
+
 def main():
     st.title("Equity Analysis Calculator")
     st.write("**Created by: Brandon Lazovic**")
@@ -157,6 +167,9 @@ def main():
         for col in columns_to_correct:
             if col in equity_data_df.columns:
                 equity_data_df[col] = equity_data_df[col].apply(convert_to_numeric)
+
+        # Normalize the data before weighting
+        equity_data_df = normalize(equity_data_df, columns_to_use)
 
         # Calculating the weighted scores for each metric in the adjusted dataset
         for column in columns_to_use:
