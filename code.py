@@ -117,21 +117,24 @@ def main():
 
         # Manually clean and parse the data
         raw_data[0] = raw_data[0].astype(str).str.replace('ï»¿', '')
+        st.write("Raw Data Preview:", raw_data.head(20))  # Inspect the first 20 rows of the raw data
+
         cleaned_records = []
 
+        # Assume the data structure is such that URL, Keywords, Search Volume, and Ranking Position are on separate rows
         for i in range(0, len(raw_data), 4):
             if i + 3 < len(raw_data):
                 record = [
-                    raw_data.iloc[i, 1],
-                    raw_data.iloc[i+1, 1],
-                    raw_data.iloc[i+2, 1],
-                    raw_data.iloc[i+3, 1]
+                    raw_data.iloc[i, 1],  # URL
+                    raw_data.iloc[i+1, 1],  # Keywords
+                    raw_data.iloc[i+2, 1],  # Search Volume
+                    raw_data.iloc[i+3, 1]  # Ranking Position
                 ]
                 cleaned_records.append(record)
 
         # Convert cleaned records to DataFrame
         keyword_data_df = pd.DataFrame(cleaned_records, columns=["url", "keywords", "search_volume", "ranking_position"])
-        
+
         # Normalize column names
         keyword_data_df.columns = [col.strip().lower().replace(' ', '_') for col in keyword_data_df.columns]
 
@@ -140,7 +143,7 @@ def main():
         keyword_data_df['search_volume'] = pd.to_numeric(keyword_data_df['search_volume'], errors='coerce')
 
         st.write("Columns in uploaded keyword file:", keyword_data_df.columns)
-        st.write(keyword_data_df.head())
+        st.write("Keyword DataFrame Preview:", keyword_data_df.head(10))
 
         required_keyword_columns = ["url", "keywords", "search_volume", "ranking_position"]
         if all(col in keyword_data_df.columns for col in required_keyword_columns):
@@ -150,8 +153,7 @@ def main():
                 number_of_keywords_page_2_score=("ranking_position", lambda x: ((x > 10) & (x <= 20)).sum()),
                 number_of_keywords_page_3_score=("ranking_position", lambda x: ((x > 20) & (x <= 30)).sum())
             ).reset_index()
-            st.write("Keyword Summary DataFrame:")
-            st.write(keyword_summary_df.head())
+            st.write("Keyword Summary DataFrame Preview:", keyword_summary_df.head(10))
         else:
             st.error("Keyword file is missing required columns: 'URL', 'Keywords', 'Search Volume', 'Ranking Position'")
 
@@ -165,8 +167,7 @@ def main():
         if 'url' in equity_data_df.columns and keyword_summary_df is not None and 'url' in keyword_summary_df.columns:
             # Merge keyword summary data with equity data
             equity_data_df = equity_data_df.merge(keyword_summary_df, on="url", how="left")
-            st.write("Merged DataFrame:")
-            st.write(equity_data_df.head())
+            st.write("Merged DataFrame Preview:", equity_data_df.head(10))
         else:
             st.error("'url' column is missing in one of the uploaded files.")
 
