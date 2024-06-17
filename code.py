@@ -46,7 +46,7 @@ def normalize(df, metric_cols):
             max_val = df[col].max()
             if max_val != min_val:
                 df_normalized[col] = (df[col] - min_val) / (max_val - min_val)
-            else: 
+            else:
                 df_normalized[col] = df[col]  # if all values are the same, normalization isn't necessary
     return df_normalized
 
@@ -173,19 +173,22 @@ def main():
         norm_data_df = normalize(equity_data_df.copy(), columns_to_use)
 
         # Calculating the weighted scores for each metric in the adjusted dataset
-        weighted_scores = []
+        weighted_scores_sum = pd.Series(np.zeros(len(norm_data_df)), index=norm_data_df.index)
         for column in columns_to_use:
             if column in norm_data_df.columns:
                 weight = weights_mapping[column]
-                weighted_scores.append(norm_data_df[column] * weight)
-
+                weighted_scores_sum += norm_data_df[column] * weight
+        
         # Calculate Trust Ratio Score as trust_flow_score / citation_flow_score
         if "trust_flow_score" in columns_to_use and "citation_flow_score" in columns_to_use:
-            trust_ratio_weighted = (norm_data_df["trust_flow_score"] / norm_data_df["citation_flow_score"]).fillna(0) * 2
-            weighted_scores.append(trust_ratio_weighted)
+            trust_ratio = (norm_data_df["trust_flow_score"] / norm_data_df["citation_flow_score"]).fillna(0) * 2
+            weighted_scores_sum += trust_ratio
 
         # Compute the final weighted score for each URL
-        equity_data_df["Final_Weighted_Score"] = np.sum(weighted_scores, axis=0)
+        equity_data_df["Final_Weighted_Score"] = weighted_scores_sum
+
+        # Debugging: Check the range of final weighted scores
+        st.write("Final Weighted Score Stats:", equity_data_df["Final_Weighted_Score"].describe())
 
         # Compute thresholds for classification
         high_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.85)
@@ -193,6 +196,9 @@ def main():
 
         # Apply classification
         equity_data_df["Recommendation"] = equity_data_df["Final_Weighted_Score"].apply(lambda x: classify_score(x, high_threshold, medium_threshold))
+
+        # Debugging: Check classification distribution
+        st.write("Classification Distribution:", equity_data_df["Recommendation"].value_counts())
 
         # Map the "Recommendation" to the corresponding action
         action_mapping = {
