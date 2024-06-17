@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
+@st.cache
 def convert_to_numeric(value):
     """Converts a value to numeric format after replacing commas."""
     try:
@@ -20,6 +21,15 @@ def classify_score(score, high_thresh, med_thresh):
     else:
         return "No value"
 
+@st.cache
+def get_table_download_link(df, filename):
+    """Generates a link to download the DataFrame as a CSV file."""
+    import base64
+    csv = df.to_csv(index=False)
+    b64 = base64.b64encode(csv.encode()).decode()
+    href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">Download CSV file</a>'
+    return href
+
 def main():
     st.title("Equity Analysis Calculator")
     st.write("**Created by: Brandon Lazovic**")
@@ -34,7 +44,7 @@ def main():
 
     st.header("How to Use It")
     st.write("""
-    1. **Download the Template**: Click the 'Download Template CSV' button to download a template file with the required columns.
+    1. **Download the Template**: Click the 'Download Equity Analysis Template CSV' or 'Download Keyword Template CSV' buttons to download template files with the required columns.
     2. **Upload Your Data**: Use the 'Upload your CSV file' button to upload your equity analysis data. Optionally, upload a keyword data file using 'Upload your keyword CSV file' for additional keyword analysis.
     3. **Select Columns**: Choose which columns to include in the analysis from the multiselect dropdown.
     4. **View Results**: The app will display the analyzed results and provide a download link for the final output file.
@@ -52,14 +62,12 @@ def main():
     # Allow users to download a template CSV file for equity analysis
     if st.button("Download Equity Analysis Template CSV"):
         equity_template_df = pd.DataFrame(columns=[
-            "URL", "Inlinks", "backlinks", "referring_domains_score", "trust_flow_score", 
+            "URL", "status_code", "Inlinks", "backlinks", "referring_domains_score", "trust_flow_score", 
             "citation_flow_score", "number_of_ranking_keywords_score", 
             "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", 
             "number_of_keywords_page_3_score", "gsc_clicks_score", "gsc_impressions_score", 
-            "internal_links_score", "unique_pageviews_organic_score", 
-            "unique_pageviews_all_traffic_score", "completed_goals_all_traffic_score"
+            "unique_pageviews_organic_score", "unique_pageviews_all_traffic_score", "completed_goals_all_traffic_score"
         ])
-        equity_template_df.to_csv("equity_analysis_template.csv", index=False)
         st.markdown(get_table_download_link(equity_template_df, "equity_analysis_template.csv"), unsafe_allow_html=True)
 
     # Allow users to download a template CSV file for keyword analysis
@@ -67,7 +75,6 @@ def main():
         keyword_template_df = pd.DataFrame(columns=[
             "Keywords", "Search Volume", "Ranking Position"
         ])
-        keyword_template_df.to_csv("keyword_template.csv", index=False)
         st.markdown(get_table_download_link(keyword_template_df, "keyword_template.csv"), unsafe_allow_html=True)
 
     # Allow users to upload their own CSV file
@@ -79,21 +86,20 @@ def main():
 
         # Adjusted weights mapping based on the dataset's columns -- add up to 100 points
         weights_mapping = {
-            "Inlinks": 3,
-            "backlinks": 5,
-            "referring_domains_score": 8,
-            "trust_flow_score": 6,
-            "citation_flow_score": 3,
-            "number_of_ranking_keywords_score": 6,
-            "number_of_keywords_page_1_score": 10,
-            "number_of_keywords_page_2_score": 8,
-            "number_of_keywords_page_3_score": 6,
-            "gsc_clicks_score": 12,
-            "gsc_impressions_score": 7,
-            "internal_links_score": 5,
+            "Inlinks": 4,
+            "backlinks": 7,
+            "referring_domains_score": 10,
+            "trust_flow_score": 8,
+            "citation_flow_score": 4,
+            "number_of_ranking_keywords_score": 7,
+            "number_of_keywords_page_1_score": 12,
+            "number_of_keywords_page_2_score": 10,
+            "number_of_keywords_page_3_score": 8,
+            "gsc_clicks_score": 14,
+            "gsc_impressions_score": 8,
             "unique_pageviews_organic_score": 6,
-            "unique_pageviews_all_traffic_score": 7,
-            "completed_goals_all_traffic_score": 10
+            "unique_pageviews_all_traffic_score": 6,
+            "completed_goals_all_traffic_score": 6
         }
 
         # Option to omit missing columns from weighting
@@ -179,14 +185,6 @@ def main():
         else:
             st.error("The keyword CSV file must include the columns: Keywords, Search Volume, and Ranking Position")
 
-def get_table_download_link(df, filename):
-    """Generates a link to download the DataFrame as a CSV file."""
-    import base64
-    csv = df.to_csv(index=False)
-    b64 = base64.b64encode(csv.encode()).decode()
-    href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">Download CSV file</a>'
-    return href
-    
 if __name__ == "__main__":
     main()
 
