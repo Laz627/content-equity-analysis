@@ -110,10 +110,10 @@ def main():
         required_keyword_columns = ["URL", "Keywords", "Search Volume", "Ranking Position"]
         if all(col in keyword_data_df.columns for col in required_keyword_columns):
             keyword_summary_df = keyword_data_df.groupby("URL").agg({
-                "total_search_volume_score": ("Search Volume", "sum"),
-                "number_of_keywords_page_1_score": (lambda x: (x["Ranking Position"] <= 10).sum()),
-                "number_of_keywords_page_2_score": (lambda x: ((x["Ranking Position"] > 10) & (x["Ranking Position"] <= 20)).sum()),
-                "number_of_keywords_page_3_score": (lambda x: ((x["Ranking Position"] > 20) & (x["Ranking Position"] <= 30)).sum())
+                "total_search_volume_score": pd.NamedAgg(column="Search Volume", aggfunc="sum"),
+                "number_of_keywords_page_1_score": pd.NamedAgg(column="Ranking Position", aggfunc=lambda x: (x <= 10).sum()),
+                "number_of_keywords_page_2_score": pd.NamedAgg(column="Ranking Position", aggfunc=lambda x: ((x > 10) & (x <= 20)).sum()),
+                "number_of_keywords_page_3_score": pd.NamedAgg(column="Ranking Position", aggfunc=lambda x: ((x > 20) & (x <= 30)).sum())
             }).reset_index()
         else:
             st.error("Keyword file is missing required columns: 'URL', 'Keywords', 'Search Volume', 'Ranking Position'")
