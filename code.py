@@ -54,7 +54,7 @@ def main():
     st.write("""
     The Equity Analysis Calculator helps you evaluate the equity of your URLs by considering various SEO metrics.
     It allows you to upload an XLSX file with your URL data and keywords, process the data to calculate weighted scores, classify the URLs,
-    and provide actionable recommendations based on their equity scores. 
+    and provide actionable recommendations based on their equity scores.
     """)
 
     st.header("How to Use It")
@@ -116,9 +116,11 @@ def main():
         equity_data_df.columns = [col.strip().lower().replace(' ', '_') for col in equity_data_df.columns]
         keyword_data_df.columns = [col.strip().lower().replace(' ', '_') for col in keyword_data_df.columns]
 
+        # Fill N/A values with 0 in both dataframes
         equity_data_df = equity_data_df.fillna(0)
         keyword_data_df = keyword_data_df.fillna(0)
 
+        # Ensure 'citation_flow_score' has no zero values to avoid division errors
         equity_data_df['citation_flow_score'] = np.where(equity_data_df['citation_flow_score'] == 0, 0.01, equity_data_df['citation_flow_score'])
 
         analysis_cols_to_numeric = columns_to_use + ["total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
