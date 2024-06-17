@@ -117,21 +117,24 @@ def main():
 
         # Manually clean and parse the data
         raw_data[0] = raw_data[0].astype(str).str.replace('ï»¿', '')
+        st.write("Raw Data Preview:", raw_data.head(20))  # Inspect the first 20 rows of the raw data
+
         cleaned_records = []
 
+        # Assume the data structure is such that URL, Keywords, Search Volume, and Ranking Position are on separate rows
         for i in range(0, len(raw_data), 4):
             if i + 3 < len(raw_data):
                 record = [
-                    raw_data.iloc[i, 1],
-                    raw_data.iloc[i+1, 1],
-                    raw_data.iloc[i+2, 1],
-                    raw_data.iloc[i+3, 1]
+                    raw_data.iloc[i, 1],  # URL
+                    raw_data.iloc[i+1, 1],  # Keywords
+                    raw_data.iloc[i+2, 1],  # Search Volume
+                    raw_data.iloc[i+3, 1]  # Ranking Position
                 ]
                 cleaned_records.append(record)
 
         # Convert cleaned records to DataFrame
         keyword_data_df = pd.DataFrame(cleaned_records, columns=["url", "keywords", "search_volume", "ranking_position"])
-        
+
         # Normalize column names
         keyword_data_df.columns = [col.strip().lower().replace(' ', '_') for col in keyword_data_df.columns]
 
@@ -140,13 +143,17 @@ def main():
         keyword_data_df['search_volume'] = pd.to_numeric(keyword_data_df['search_volume'], errors='coerce')
 
         st.write("Columns in uploaded keyword file:", keyword_data_df.columns)
-        st.write(keyword_data_df.head())
+        st.write("Keyword DataFrame Preview:", keyword_data_df.head(10))
 
         required_keyword_columns = ["url", "keywords", "search_volume", "ranking_position"]
         if all(col in keyword_data_df.columns for col in required_keyword_columns):
-            keyword_summary_df = keyword_data_df.copy()
-            st.write("Keyword Summary DataFrame:")
-            st.write(keyword_summary_df.head())
+            keyword_summary_df = keyword_data_df.groupby("url").agg(
+                total_search_volume_score=("search_volume", "sum"),
+                number_of_keywords_page_1_score=("ranking_position", lambda x: (x <= 10).sum()),
+                number_of_keywords_page_2_score=("ranking_position", lambda x: ((x > 10) & (x <= 20)).sum()),
+                number_of_keywords_page_3_score=("ranking_position", lambda x: ((x > 20) & (x <= 30)).sum())
+            ).reset_index()
+            st.write("Keyword Summary DataFrame Preview:", keyword_summary_df.head(10))
         else:
             st.error("Keyword file is missing required columns: 'URL', 'Keywords', 'Search Volume', 'Ranking Position'")
 
@@ -159,12 +166,10 @@ def main():
         # Check if 'url' column exists in both DataFrames
         if 'url' in equity_data_df.columns and keyword_summary_df is not None and 'url' in keyword_summary_df.columns:
             # Merge keyword summary data with equity data
-            result_df = equity_data_df.merge(keyword_summary_df, on="url", how="left")
-            st.write("Merged DataFrame:")
-            st.write(result_df.head())
+            equity_data_df = equity_data_df.merge(keyword_summary_df, on="url", how="left")
+            st.write("Merged DataFrame Preview:", equity_data_df.head(10))
         else:
             st.error("'url' column is missing in one of the uploaded files.")
-            result_df = equity_data_df
 
         # Correct data formatting for columns with numeric values
         columns_to_correct = [
@@ -175,31 +180,31 @@ def main():
         ]
 
         for col in columns_to_correct:
-            if col in result_df.columns:
-                result_df[col] = result_df[col].apply(convert_to_numeric)
+            if col in equity_data_df.columns:
+                equity_data_df[col] = equity_data_df[col].apply(convert_to_numeric)
 
         # Calculating the weighted scores for each metric in the adjusted dataset
         for column in columns_to_use:
-            if column in result_df.columns:
+            if column in equity_data_df.columns:
                 weight = weights_mapping[column]
-                result_df[f"{column}_Weighted"] = result_df[column] * weight
+                equity_data_df[f"{column}_Weighted"] = equity_data_df[column] * weight
 
         # Calculate Trust Ratio Score as trust_flow_score / citation_flow_score
         if "trust_flow_score" in columns_to_use and "citation_flow_score" in columns_to_use:
-            result_df["Trust_Ratio_Weighted"] = (result_df["trust_flow_score"] / result_df["citation_flow_score"]).fillna(0) * 2
+            equity_data_df["Trust_Ratio_Weighted"] = (equity_data_df["trust_flow_score"] / equity_data_df["citation_flow_score"]).fillna(0) * 2
 
         # Columns to include for the final weighted score
-        columns_for_final_score = [f"{col}_Weighted" for col in columns_to_use if col in result_df.columns] + ["Trust_Ratio_Weighted"]
+        columns_for_final_score = [f"{col}_Weighted" for col in columns_to_use if col in equity_data_df.columns] + ["Trust_Ratio_Weighted"]
 
         # Compute the final weighted score for each URL
-        result_df["Final_Weighted_Score"] = result_df[columns_for_final_score].sum(axis=1)
+        equity_data_df["Final_Weighted_Score"] = equity_data_df[columns_for_final_score].sum(axis=1)
 
         # Compute thresholds for classification
-        high_threshold = result_df["Final_Weighted_Score"].quantile(0.85)
-        medium_threshold = result_df["Final_Weighted_Score"].quantile(0.50)
+        high_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.85)
+        medium_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.50)
 
         # Apply classification
-        result_df["Recommendation"] = result_df["Final_Weighted_Score"].apply(lambda x: classify_score(x, high_threshold, medium_threshold))
+        equity_data_df["Recommendation"] = equity_data_df["Final_Weighted_Score"].apply(lambda x: classify_score(x, high_threshold, medium_threshold))
 
         # Map the "Recommendation" to the corresponding action
         action_mapping = {
@@ -208,17 +213,17 @@ def main():
             "Low": "Evaluate URL priority or deprecate",
             "No value": "Do not keep or migrate"
         }
-        result_df["Action"] = result_df["Recommendation"].map(action_mapping)
+        equity_data_df["Action"] = equity_data_df["Recommendation"].map(action_mapping)
 
         # Ensure keyword columns are included in the output
-        keyword_columns = ["keywords", "search_volume", "ranking_position"]
+        keyword_columns = ["total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
         for col in keyword_columns:
-            if col in result_df.columns:
+            if col in equity_data_df.columns:
                 columns_to_use.append(col)
         
         # Remove weighted score columns from the export
-        export_columns = [col for col in result_df.columns if not col.endswith('_Weighted') and col != "Final_Weighted_Score"]
-        result_df = result_df[export_columns]
+        export_columns = [col for col in equity_data_df.columns if not col.endswith('_Weighted') and col != "Final_Weighted_Score"]
+        result_df = equity_data_df[export_columns]
 
         # Show the results
         st.write(result_df)
