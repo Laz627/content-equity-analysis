@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import base64
 import io
-import openpyxl
 
 # Check if openpyxl is installed
 try:
@@ -14,11 +13,11 @@ except ImportError:
 
 @st.cache_data
 def convert_to_numeric(value):
-    """Converts a value to numeric format after replacing commas."""
+    """Converts a value to numeric format after replacing commas. Non-convertible values become NaN."""
     try:
         return float(str(value).replace(',', ''))
     except ValueError:
-        return value
+        return np.nan  # Return NaN for non-convertible values
 
 def classify_score(score, high_thresh, med_thresh):
     """Classify the score into High, Medium, Low, or No value based on thresholds."""
@@ -158,7 +157,14 @@ def main():
             ]
             for col in analysis_cols_to_numeric:
                 if col in equity_data_df.columns:
-                    equity_data_df[col] = equity_data_df[col].apply(convert_to_numeric)
+                    equity_data_df[col] = pd.to_numeric(equity_data_df[col].apply(lambda x: str(x).replace(',', '')), errors='coerce')
+
+            # After conversion, fill NaN values with 0
+            equity_data_df[analysis_cols_to_numeric] = equity_data_df[analysis_cols_to_numeric].fillna(0)
+
+            # Verify data types
+            st.write("Data types of analysis columns:")
+            st.write(equity_data_df[analysis_cols_to_numeric].dtypes)
 
             # Convert keyword data columns to numeric
             keyword_data_df['ranking_position'] = pd.to_numeric(keyword_data_df['ranking_position'], errors='coerce')
@@ -261,8 +267,8 @@ def main():
         st.write("Classification Distribution:")
         st.write(equity_data_df["Recommendation"].value_counts())
 
-        st.write("Detailed URL Table:")
-        st.write(result_df)
+        st.write("Detailed URL Table (showing first 100 rows):")
+        st.write(result_df.head(100))
 
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
