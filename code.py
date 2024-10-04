@@ -18,16 +18,17 @@ def convert_to_numeric(value):
     except ValueError:
         return np.nan  # Return NaN for non-convertible values
 
-def classify_score(score, high_thresh, med_thresh):
-    """Classify the score into High, Medium, Low, or No value based on thresholds."""
-    if score >= high_thresh:
-        return "High"
-    elif score >= med_thresh:
-        return "Medium"
-    elif score > 0:
-        return "Low"
-    else:
+def classify_score(row, high_thresh, med_thresh, metric_cols):
+    """Classify the score into High, Medium, Low, or No value based on thresholds and metric values."""
+    # Check if all selected metrics are zero
+    if (row[metric_cols] == 0).all():
         return "No value"
+    elif row["Final_Weighted_Score"] >= high_thresh:
+        return "High"
+    elif row["Final_Weighted_Score"] >= med_thresh:
+        return "Medium"
+    else:
+        return "Low"
 
 def get_excel_download_link(output, filename):
     """Generates a link to download the DataFrame as an Excel file."""
@@ -224,19 +225,13 @@ def main():
 
             equity_data_df["Final_Weighted_Score"] = weighted_scores_sum
 
-            # Allow user to adjust thresholds
-            st.header("Adjust Classification Thresholds")
-            st.write("You can adjust the thresholds to fine-tune the classification.")
+            # Determine thresholds for classification
+            high_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.85)
+            medium_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.50)
 
-            # Calculate min and max of Final_Weighted_Score for slider ranges
-            min_score = equity_data_df["Final_Weighted_Score"].min()
-            max_score = equity_data_df["Final_Weighted_Score"].max()
-
-            high_threshold = st.slider("High Value Threshold", min_value=float(min_score), max_value=float(max_score), value=float(equity_data_df["Final_Weighted_Score"].quantile(0.85)))
-            medium_threshold = st.slider("Medium Value Threshold", min_value=float(min_score), max_value=high_threshold, value=float(equity_data_df["Final_Weighted_Score"].quantile(0.50)))
-
-            equity_data_df["Recommendation"] = equity_data_df["Final_Weighted_Score"].apply(
-                lambda x: classify_score(x, high_threshold, medium_threshold)
+            # Classification
+            equity_data_df["Recommendation"] = equity_data_df.apply(
+                classify_score, axis=1, args=(high_threshold, medium_threshold, columns_to_use)
             )
 
             action_mapping = {
@@ -263,8 +258,8 @@ def main():
             st.write("Classification Distribution:")
             st.write(equity_data_df["Recommendation"].value_counts())
 
-            st.write("Detailed URL Table (showing first 100 rows):")
-            st.write(result_df.head(100))
+            st.write("Detailed URL Table:")
+            st.write(result_df)
 
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
