@@ -11,13 +11,12 @@ except ImportError:
     st.error("The openpyxl library is required to handle Excel files. Please install it using: pip install openpyxl")
     st.stop()
 
-@st.cache_data
 def convert_to_numeric(value):
     """Converts a value to numeric format after replacing commas."""
     try:
         return float(str(value).replace(',', ''))
     except ValueError:
-        return value
+        return np.nan  # Return NaN for non-convertible values
 
 def classify_score(score, high_thresh, med_thresh):
     """Classify the score into High, Medium, Low, or No value based on thresholds."""
@@ -41,11 +40,11 @@ def normalize(df, metric_cols):
     """Normalize the specified columns in the DataFrame using Min-Max normalization."""
     df_normalized = df.copy()
     for col in metric_cols:
-        if col in df.columns:
-            min_val = df[col].min()
-            max_val = df[col].max()
+        if col in df_normalized.columns:
+            min_val = df_normalized[col].min()
+            max_val = df_normalized[col].max()
             if max_val != min_val:
-                df_normalized[col] = (df[col] - min_val) / (max_val - min_val)
+                df_normalized[col] = (df_normalized[col] - min_val) / (max_val - min_val)
             else:
                 df_normalized[col] = 0
     return df_normalized
@@ -97,7 +96,7 @@ def main():
 
     # Updated weights mapping with GA4 metrics
     weights_mapping = {
-        "Inlinks": 4,
+        "inlinks": 4,
         "backlinks": 7,
         "referring_domains_score": 10,
         "trust_flow_score": 8,
@@ -111,13 +110,13 @@ def main():
         "number_of_keywords_page_2_score": 8,
         "number_of_keywords_page_3_score": 6,
         "total_search_volume_score": 5,
-        "GA4_Sessions": 14,               # Important
-        "GA4_Engaged_Sessions": 12,       # Important
-        "GA4_Conversions": 12,            # Important
-        "GA4_Views_Per_Session": 5,       # Less important
-        "GA4_Average_Session_Duration": 5,  # Less important
-        "GA4_Bounce_Rate": 5,             # Less important
-        "GA4_Views": 4                    # Less important
+        "ga4_sessions": 14,               # Important
+        "ga4_engaged_sessions": 12,       # Important
+        "ga4_conversions": 12,            # Important
+        "ga4_views_per_session": 5,       # Less important
+        "ga4_average_session_duration": 5,  # Less important
+        "ga4_bounce_rate": 5,             # Less important
+        "ga4_views": 4                    # Less important
     }
 
     # Default selected columns, including new GA4 metrics
@@ -128,6 +127,9 @@ def main():
         options=default_columns,
         default=default_columns
     )
+
+    # Convert columns_to_use to lowercase
+    columns_to_use = [col.lower() for col in columns_to_use]
 
     uploaded_file = st.file_uploader("Upload your XLSX file", type="xlsx")
 
@@ -151,12 +153,26 @@ def main():
             # Ensure 'citation_flow_score' has no zero values to avoid division errors
             equity_data_df['citation_flow_score'] = np.where(equity_data_df['citation_flow_score'] == 0, 0.01, equity_data_df['citation_flow_score'])
 
+            # Identify time duration columns
+            time_duration_columns = ['ga4_average_session_duration']  # Add any other time duration columns here
+
+            # Convert time duration strings to total seconds
+            for col in time_duration_columns:
+                if col in equity_data_df.columns:
+                    equity_data_df[col] = pd.to_timedelta(equity_data_df[col].astype(str), errors='coerce').dt.total_seconds()
+                    equity_data_df[col] = equity_data_df[col].fillna(0)
+
             # Convert analysis columns to numeric
-            analysis_cols_to_numeric = columns_to_use + ["total_search_volume_score", "number_of_keywords_page_1_score",
-                                                         "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
+            analysis_cols_to_numeric = columns_to_use + [
+                "total_search_volume_score",
+                "number_of_keywords_page_1_score",
+                "number_of_keywords_page_2_score",
+                "number_of_keywords_page_3_score"
+            ]
+
             for col in analysis_cols_to_numeric:
-                if col.lower() in equity_data_df.columns:
-                    equity_data_df[col.lower()] = equity_data_df[col.lower()].apply(convert_to_numeric)
+                if col in equity_data_df.columns:
+                    equity_data_df[col] = pd.to_numeric(equity_data_df[col], errors='coerce').fillna(0)
 
             keyword_data_df['ranking_position'] = pd.to_numeric(keyword_data_df['ranking_position'], errors='coerce')
             keyword_data_df['search_volume'] = pd.to_numeric(keyword_data_df['search_volume'], errors='coerce')
@@ -183,19 +199,18 @@ def main():
             equity_data_df = equity_data_df.fillna(0)
 
             # Normalize selected columns
-            norm_data_df = normalize(equity_data_df.copy(), [col.lower() for col in columns_to_use])
+            norm_data_df = normalize(equity_data_df.copy(), columns_to_use)
 
             # Calculate weighted scores
             weighted_scores_sum = pd.Series(np.zeros(len(norm_data_df)), index=norm_data_df.index)
             for column in columns_to_use:
-                col_lower = column.lower()
-                if col_lower in norm_data_df.columns:
-                    weight = weights_mapping[column]
-                    weighted_sum = norm_data_df[col_lower] * weight
+                if column in norm_data_df.columns:
+                    weight = weights_mapping.get(column, 0)
+                    weighted_sum = norm_data_df[column] * weight
                     weighted_scores_sum += weighted_sum
 
             # Calculate trust ratio if applicable
-            if "trust_flow_score" in [col.lower() for col in columns_to_use] and "citation_flow_score" in [col.lower() for col in columns_to_use]:
+            if "trust_flow_score" in columns_to_use and "citation_flow_score" in columns_to_use:
                 if (norm_data_df["citation_flow_score"] != 0).all():
                     trust_ratio = (norm_data_df["trust_flow_score"] / norm_data_df["citation_flow_score"]).fillna(0) * 2
                 else:
@@ -224,7 +239,7 @@ def main():
             keyword_columns = ["total_search_volume_score", "number_of_keywords_page_1_score",
                                "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
             for col in keyword_columns:
-                if col in equity_data_df.columns and col not in [c.lower() for c in columns_to_use]:
+                if col in equity_data_df.columns and col not in columns_to_use:
                     columns_to_use.append(col)
 
             # Prepare final result DataFrame
@@ -236,8 +251,8 @@ def main():
         st.write("Classification Distribution:")
         st.write(equity_data_df["Recommendation"].value_counts())
 
-        st.write("Detailed URL Table (showing first 100 rows):")
-        st.write(result_df.head(100))
+        st.write("Detailed URL Table:")
+        st.write(result_df)
 
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
