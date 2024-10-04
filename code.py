@@ -20,9 +20,9 @@ def convert_to_numeric(value):
 
 def classify_score(score, high_thresh, med_thresh):
     """Classify the score into High, Medium, Low, or No value based on thresholds."""
-    if score > high_thresh:
+    if score >= high_thresh:
         return "High"
-    elif score > med_thresh:
+    elif score >= med_thresh:
         return "Medium"
     elif score > 0:
         return "Low"
@@ -36,15 +36,15 @@ def get_excel_download_link(output, filename):
     href = f'<a href="data:application/octet-stream;base64,{b64}" download="{filename}">Download Excel file</a>'
     return href
 
-def normalize(df, metric_cols):
-    """Normalize the specified columns in the DataFrame using Min-Max normalization."""
+def z_score_normalize(df, metric_cols):
+    """Normalize the specified columns in the DataFrame using z-score normalization."""
     df_normalized = df.copy()
     for col in metric_cols:
         if col in df_normalized.columns:
-            min_val = df_normalized[col].min()
-            max_val = df_normalized[col].max()
-            if max_val != min_val:
-                df_normalized[col] = (df_normalized[col] - min_val) / (max_val - min_val)
+            mean = df_normalized[col].mean()
+            std = df_normalized[col].std()
+            if std != 0:
+                df_normalized[col] = (df_normalized[col] - mean) / std
             else:
                 df_normalized[col] = 0
     return df_normalized
@@ -94,7 +94,7 @@ def main():
     - Offer actionable recommendations for each URL based on their classification.
     """)
 
-    # Updated weights mapping with GA4 metrics
+    # Weights mapping with GA4 metrics
     weights_mapping = {
         "inlinks": 4,
         "backlinks": 7,
@@ -172,7 +172,8 @@ def main():
 
             for col in analysis_cols_to_numeric:
                 if col in equity_data_df.columns:
-                    equity_data_df[col] = pd.to_numeric(equity_data_df[col], errors='coerce').fillna(0)
+                    equity_data_df[col] = equity_data_df[col].apply(convert_to_numeric)
+                    equity_data_df[col] = equity_data_df[col].fillna(0)
 
             keyword_data_df['ranking_position'] = pd.to_numeric(keyword_data_df['ranking_position'], errors='coerce')
             keyword_data_df['search_volume'] = pd.to_numeric(keyword_data_df['search_volume'], errors='coerce')
@@ -198,8 +199,8 @@ def main():
 
             equity_data_df = equity_data_df.fillna(0)
 
-            # Normalize selected columns
-            norm_data_df = normalize(equity_data_df.copy(), columns_to_use)
+            # Z-score normalization of selected columns
+            norm_data_df = z_score_normalize(equity_data_df.copy(), columns_to_use)
 
             # Calculate weighted scores
             weighted_scores_sum = pd.Series(np.zeros(len(norm_data_df)), index=norm_data_df.index)
@@ -208,6 +209,8 @@ def main():
                     weight = weights_mapping.get(column, 0)
                     weighted_sum = norm_data_df[column] * weight
                     weighted_scores_sum += weighted_sum
+                    # Debugging output
+                    equity_data_df[f"{column}_weighted"] = norm_data_df[column] * weight
 
             # Calculate trust ratio if applicable
             if "trust_flow_score" in columns_to_use and "citation_flow_score" in columns_to_use:
@@ -216,12 +219,21 @@ def main():
                 else:
                     trust_ratio = pd.Series(np.zeros(len(norm_data_df)), index=norm_data_df.index)
                 weighted_scores_sum += trust_ratio
+                # Debugging output
+                equity_data_df["trust_ratio"] = trust_ratio
 
             equity_data_df["Final_Weighted_Score"] = weighted_scores_sum
 
-            # Determine thresholds for classification
-            high_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.85)
-            medium_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.50)
+            # Allow user to adjust thresholds
+            st.header("Adjust Classification Thresholds")
+            st.write("You can adjust the thresholds to fine-tune the classification.")
+
+            # Calculate min and max of Final_Weighted_Score for slider ranges
+            min_score = equity_data_df["Final_Weighted_Score"].min()
+            max_score = equity_data_df["Final_Weighted_Score"].max()
+
+            high_threshold = st.slider("High Value Threshold", min_value=float(min_score), max_value=float(max_score), value=float(equity_data_df["Final_Weighted_Score"].quantile(0.85)))
+            medium_threshold = st.slider("Medium Value Threshold", min_value=float(min_score), max_value=high_threshold, value=float(equity_data_df["Final_Weighted_Score"].quantile(0.50)))
 
             equity_data_df["Recommendation"] = equity_data_df["Final_Weighted_Score"].apply(
                 lambda x: classify_score(x, high_threshold, medium_threshold)
@@ -243,21 +255,24 @@ def main():
                     columns_to_use.append(col)
 
             # Prepare final result DataFrame
-            export_columns = [col for col in equity_data_df.columns if col not in ("Final_Weighted_Score",)]
+            export_columns = [col for col in equity_data_df.columns if not col.endswith("_weighted") and col not in ("Final_Weighted_Score", "trust_ratio")]
             result_df = equity_data_df[export_columns]
 
             result_df = result_df.fillna(0)
 
-        st.write("Classification Distribution:")
-        st.write(equity_data_df["Recommendation"].value_counts())
+            st.write("Classification Distribution:")
+            st.write(equity_data_df["Recommendation"].value_counts())
 
-        st.write("Detailed URL Table:")
-        st.write(result_df)
+            st.write("Detailed URL Table (showing first 100 rows):")
+            st.write(result_df.head(100))
 
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            result_df.to_excel(writer, index=False, sheet_name='Results')
-        st.markdown(get_excel_download_link(output, "equity_analysis_results.xlsx"), unsafe_allow_html=True)
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                result_df.to_excel(writer, index=False, sheet_name='Results')
+            st.markdown(get_excel_download_link(output, "equity_analysis_results.xlsx"), unsafe_allow_html=True)
+
+    else:
+        st.write("Please upload an XLSX file to proceed.")
 
 if __name__ == "__main__":
     main()
