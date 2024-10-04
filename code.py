@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import base64
 import io
+import openpyxl
 
 # Check if openpyxl is installed
 try:
@@ -56,7 +57,7 @@ def main():
 
     st.header("How It Works")
     st.write("""
-    The Equity Analysis Calculator helps you evaluate the equity of your URLs by considering various SEO metrics.
+    The Equity Analysis Calculator helps you evaluate the equity of your URLs by considering various SEO and GA4 metrics.
     It allows you to upload an XLSX file with your URL data and keywords, process the data to calculate weighted scores, classify the URLs,
     and provide actionable recommendations based on their equity scores.
     """)
@@ -72,9 +73,11 @@ def main():
 
     if st.button("Download Equity Analysis Template XLSX"):
         equity_template_df = pd.DataFrame(columns=[
-            "URL", "status_code", "Inlinks", "backlinks", "referring_domains_score", "trust_flow_score", 
-            "citation_flow_score", "gsc_clicks_score", "gsc_impressions_score", 
-            "unique_pageviews_organic_score", "unique_pageviews_all_traffic_score", "completed_goals_all_traffic_score"
+            "URL", "status_code", "Inlinks", "backlinks", "referring_domains_score", "trust_flow_score",
+            "citation_flow_score", "gsc_clicks_score", "gsc_impressions_score",
+            "unique_pageviews_organic_score", "unique_pageviews_all_traffic_score", "completed_goals_all_traffic_score",
+            "ga4_sessions", "ga4_views", "ga4_engaged_sessions", "ga4_conversions",
+            "ga4_views_per_session", "ga4_average_session_duration", "ga4_bounce_rate"
         ])
         keyword_template_df = pd.DataFrame(columns=[
             "URL", "Keywords", "Search Volume", "Ranking Position"
@@ -93,13 +96,31 @@ def main():
     - Offer actionable recommendations for each URL based on their classification.
     """)
 
+    # Update the weights_mapping with new GA4 metrics and adjusted weights
     weights_mapping = {
-        "Inlinks": 4, "backlinks": 7, "referring_domains_score": 10, "trust_flow_score": 8,
-        "citation_flow_score": 4, "gsc_clicks_score": 14, "gsc_impressions_score": 8,
-        "unique_pageviews_organic_score": 6, "unique_pageviews_all_traffic_score": 6,
-        "completed_goals_all_traffic_score": 6, "number_of_keywords_page_1_score": 10,
-        "number_of_keywords_page_2_score": 8, "number_of_keywords_page_3_score": 6,
-        "total_search_volume_score": 5
+        # Existing metrics with their weights
+        "Inlinks": 4,
+        "backlinks": 7,
+        "referring_domains_score": 10,
+        "trust_flow_score": 8,
+        "citation_flow_score": 4,
+        "gsc_clicks_score": 14,
+        "gsc_impressions_score": 8,
+        "unique_pageviews_organic_score": 6,
+        "unique_pageviews_all_traffic_score": 6,
+        "completed_goals_all_traffic_score": 6,
+        "number_of_keywords_page_1_score": 10,
+        "number_of_keywords_page_2_score": 8,
+        "number_of_keywords_page_3_score": 6,
+        "total_search_volume_score": 5,
+        # New GA4 metrics with adjusted weights
+        "ga4_sessions": 14,
+        "ga4_engaged_sessions": 14,
+        "ga4_conversions": 16,
+        "ga4_views": 6,
+        "ga4_views_per_session": 4,
+        "ga4_average_session_duration": 4,
+        "ga4_bounce_rate": 2
     }
 
     columns_to_use = st.multiselect(
@@ -110,7 +131,6 @@ def main():
 
     uploaded_file = st.file_uploader("Upload your XLSX file", type="xlsx")
 
-
     if uploaded_file is not None:
         with st.spinner('Processing your file...'):
             try:
@@ -120,21 +140,27 @@ def main():
                 st.error(f"Error reading sheets: {e}")
                 return
 
+            # Ensure columns are correctly formatted
             equity_data_df.columns = [col.strip().lower().replace(' ', '_') for col in equity_data_df.columns]
             keyword_data_df.columns = [col.strip().lower().replace(' ', '_') for col in keyword_data_df.columns]
 
-            # Fill N/A values with 0 in both dataframes
+            # Fill N/A values with 0
             equity_data_df = equity_data_df.fillna(0)
             keyword_data_df = keyword_data_df.fillna(0)
 
             # Ensure 'citation_flow_score' has no zero values to avoid division errors
             equity_data_df['citation_flow_score'] = np.where(equity_data_df['citation_flow_score'] == 0, 0.01, equity_data_df['citation_flow_score'])
 
-            analysis_cols_to_numeric = columns_to_use + ["total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
+            # Convert relevant columns to numeric
+            analysis_cols_to_numeric = columns_to_use + [
+                "total_search_volume_score", "number_of_keywords_page_1_score",
+                "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"
+            ]
             for col in analysis_cols_to_numeric:
                 if col in equity_data_df.columns:
                     equity_data_df[col] = equity_data_df[col].apply(convert_to_numeric)
 
+            # Convert keyword data columns to numeric
             keyword_data_df['ranking_position'] = pd.to_numeric(keyword_data_df['ranking_position'], errors='coerce')
             keyword_data_df['search_volume'] = pd.to_numeric(keyword_data_df['search_volume'], errors='coerce')
 
@@ -151,6 +177,7 @@ def main():
                 st.error("Keyword file is missing required columns: 'URL', 'Keywords', 'Search Volume', 'Ranking Position'")
                 return
 
+            # Merge keyword data
             if 'url' in equity_data_df.columns and keyword_summary_df is not None and 'url' in keyword_summary_df.columns:
                 equity_data_df = equity_data_df.merge(keyword_summary_df, on="url", how="left")
             else:
@@ -159,24 +186,49 @@ def main():
 
             equity_data_df = equity_data_df.fillna(0)
 
-            norm_data_df = normalize(equity_data_df.copy(), columns_to_use)
+            # Implement the hybrid weighting approach
+            # Calculate averages for each metric
+            metric_averages = equity_data_df[columns_to_use].mean()
 
-            weighted_scores_sum = pd.Series(np.zeros(len(norm_data_df)), index=norm_data_df.index)
+            weighted_scores_sum = pd.Series(np.zeros(len(equity_data_df)), index=equity_data_df.index)
+
             for column in columns_to_use:
-                if column in norm_data_df.columns:
-                    weight = weights_mapping[column]
-                    weighted_sum = norm_data_df[column] * weight
-                    weighted_scores_sum += weighted_sum
+                if column in equity_data_df.columns:
+                    base_weight = weights_mapping[column]
+                    average = metric_averages[column]
+                    # Avoid division by zero
+                    average = average if average != 0 else 0.0001
+                    # Adjust weight based on how the URL's metric compares to the average
+                    # Assign full weight if value >= average, partial weight if less
+                    ratio = equity_data_df[column] / average
+                    adjusted_weight = base_weight * np.minimum(ratio, 1)
+                    # Optionally, increase weight if significantly above average (e.g., up to 1.5x)
+                    adjusted_weight += base_weight * np.maximum((ratio - 1) * 0.5, 0)
+                    # Cap the adjusted weight
+                    max_weight = base_weight * 1.5  # Adjust as necessary
+                    adjusted_weight = adjusted_weight.clip(upper=max_weight)
+                    # Normalize the metric
+                    min_val = equity_data_df[column].min()
+                    max_val = equity_data_df[column].max()
+                    if max_val != min_val:
+                        normalized_metric = (equity_data_df[column] - min_val) / (max_val - min_val)
+                    else:
+                        normalized_metric = 0
+                    # Add to the weighted sum
+                    weighted_scores_sum += normalized_metric * adjusted_weight
 
+            # Include the trust ratio if applicable
             if "trust_flow_score" in columns_to_use and "citation_flow_score" in columns_to_use:
-                if (norm_data_df["citation_flow_score"] != 0).all():
-                    trust_ratio = (norm_data_df["trust_flow_score"] / norm_data_df["citation_flow_score"]).fillna(0) * 2
+                if (equity_data_df["citation_flow_score"] != 0).all():
+                    trust_ratio = (equity_data_df["trust_flow_score"] / equity_data_df["citation_flow_score"]).fillna(0) * 2
                 else:
-                    trust_ratio = pd.Series(np.zeros(len(norm_data_df)), index=norm_data_df.index)
+                    trust_ratio = pd.Series(np.zeros(len(equity_data_df)), index=equity_data_df.index)
                 weighted_scores_sum += trust_ratio
 
+            # Assign the final weighted score
             equity_data_df["Final_Weighted_Score"] = weighted_scores_sum
 
+            # Proceed with classification as before
             high_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.85)
             medium_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.50)
 
@@ -192,12 +244,16 @@ def main():
             }
             equity_data_df["Action"] = equity_data_df["Recommendation"].map(action_mapping)
 
-            keyword_columns = ["total_search_volume_score", "number_of_keywords_page_1_score", "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
+            # Prepare the final result dataframe
+            # Include keyword columns if they were calculated
+            keyword_columns = ["total_search_volume_score", "number_of_keywords_page_1_score",
+                               "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
             for col in keyword_columns:
                 if col in equity_data_df.columns and col not in columns_to_use:
                     columns_to_use.append(col)
 
-            export_columns = [col for col in equity_data_df.columns if col in equity_data_df and col not in ("Final_Weighted_Score",)]
+            # Exclude 'Final_Weighted_Score' from the export columns if desired
+            export_columns = [col for col in equity_data_df.columns if col != "Final_Weighted_Score"]
             result_df = equity_data_df[export_columns]
 
             result_df = result_df.fillna(0)
