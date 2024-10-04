@@ -236,8 +236,8 @@ def main():
         st.write("Classification Distribution:")
         st.write(equity_data_df["Recommendation"].value_counts())
 
-        st.write("Detailed URL Table:")
-        st.write(result_df)
+        st.write("Detailed URL Table (showing first 100 rows):")
+        st.write(result_df.head(100))
 
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
