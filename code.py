@@ -150,21 +150,17 @@ def main():
             # Ensure 'citation_flow_score' has no zero values to avoid division errors
             equity_data_df['citation_flow_score'] = np.where(equity_data_df['citation_flow_score'] == 0, 0.01, equity_data_df['citation_flow_score'])
 
-            # Convert relevant columns to numeric
-            analysis_cols_to_numeric = columns_to_use + [
-                "total_search_volume_score", "number_of_keywords_page_1_score",
-                "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"
-            ]
+            # Convert relevant columns to numeric (excluding keyword columns for now)
+            keyword_columns = ["total_search_volume_score", "number_of_keywords_page_1_score",
+                               "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
+
+            analysis_cols_to_numeric = [col for col in columns_to_use if col not in keyword_columns]
+
             for col in analysis_cols_to_numeric:
                 if col in equity_data_df.columns:
-                    equity_data_df[col] = pd.to_numeric(equity_data_df[col].apply(lambda x: str(x).replace(',', '')), errors='coerce')
-
-            # After conversion, fill NaN values with 0
-            equity_data_df[analysis_cols_to_numeric] = equity_data_df[analysis_cols_to_numeric].fillna(0)
-
-            # Verify data types
-            st.write("Data types of analysis columns:")
-            st.write(equity_data_df[analysis_cols_to_numeric].dtypes)
+                    equity_data_df[col] = pd.to_numeric(
+                        equity_data_df[col].apply(lambda x: str(x).replace(',', '')), errors='coerce'
+                    ).fillna(0)
 
             # Convert keyword data columns to numeric
             keyword_data_df['ranking_position'] = pd.to_numeric(keyword_data_df['ranking_position'], errors='coerce')
@@ -183,8 +179,8 @@ def main():
                 st.error("Keyword file is missing required columns: 'URL', 'Keywords', 'Search Volume', 'Ranking Position'")
                 return
 
-            # Merge keyword data
-            if 'url' in equity_data_df.columns and keyword_summary_df is not None and 'url' in keyword_summary_df.columns:
+            # Merge keyword data into equity_data_df
+            if 'url' in equity_data_df.columns and 'url' in keyword_summary_df.columns:
                 equity_data_df = equity_data_df.merge(keyword_summary_df, on="url", how="left")
             else:
                 st.error("'url' column is missing in one of the uploaded sheets.")
@@ -192,13 +188,22 @@ def main():
 
             equity_data_df = equity_data_df.fillna(0)
 
+            # Now process and include keyword columns
+            for col in keyword_columns:
+                if col in equity_data_df.columns:
+                    equity_data_df[col] = pd.to_numeric(
+                        equity_data_df[col], errors='coerce'
+                    ).fillna(0)
+                    if col in columns_to_use and col not in analysis_cols_to_numeric:
+                        analysis_cols_to_numeric.append(col)
+
             # Implement the hybrid weighting approach
             # Calculate averages for each metric
-            metric_averages = equity_data_df[columns_to_use].mean()
+            metric_averages = equity_data_df[analysis_cols_to_numeric].mean()
 
             weighted_scores_sum = pd.Series(np.zeros(len(equity_data_df)), index=equity_data_df.index)
 
-            for column in columns_to_use:
+            for column in analysis_cols_to_numeric:
                 if column in equity_data_df.columns:
                     base_weight = weights_mapping[column]
                     average = metric_averages[column]
@@ -251,13 +256,6 @@ def main():
             equity_data_df["Action"] = equity_data_df["Recommendation"].map(action_mapping)
 
             # Prepare the final result dataframe
-            # Include keyword columns if they were calculated
-            keyword_columns = ["total_search_volume_score", "number_of_keywords_page_1_score",
-                               "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
-            for col in keyword_columns:
-                if col in equity_data_df.columns and col not in columns_to_use:
-                    columns_to_use.append(col)
-
             # Exclude 'Final_Weighted_Score' from the export columns if desired
             export_columns = [col for col in equity_data_df.columns if col != "Final_Weighted_Score"]
             result_df = equity_data_df[export_columns]
