@@ -19,16 +19,16 @@ def convert_to_numeric(value):
     except ValueError:
         return np.nan  # Return NaN for non-convertible values
 
-def classify_score(score, high_thresh, med_thresh):
-    """Classify the score into High, Medium, Low, or No value based on thresholds."""
-    if score > high_thresh:
+def classify_score_v2(score, high_thresh, med_thresh, row):
+    """Classify the score into High, Medium, Low, or No value based on thresholds and minimum metric requirements."""
+    if row['gsc_clicks_score'] == 0 or row['ga4_sessions'] == 0 or row['ga4_conversions'] == 0:
+        return "Low"
+    elif score > high_thresh:
         return "High"
     elif score > med_thresh:
         return "Medium"
-    elif score > 0:
-        return "Low"
     else:
-        return "No value"
+        return "Low"
 
 def get_excel_download_link(output, filename):
     """Generates a link to download the DataFrame as an Excel file."""
@@ -61,15 +61,6 @@ def main():
     and provide actionable recommendations based on their equity scores.
     """)
 
-    st.header("How to Use It")
-    st.write("""
-    1. **Download the Template**: Click the 'Download Equity Analysis Template XLSX' button to download a template file with the required columns.
-    2. **Fill Out the Template**: Enter your values into the template XLSX file. If values aren't applicable, either enter 0 for all empty fields, or delete the header columns.
-    3. **Select Columns**: Choose which columns to include in the analysis from the multiselect dropdown. Remove any columns that are empty / unused.
-    4. **Upload Your Data**: Use the 'Upload your XLSX file' button to upload your equity analysis data and keywords in separate tabs.
-    5. **View Results**: The app will display the analyzed results and provide a download link for the final output file.
-    """)
-
     if st.button("Download Equity Analysis Template XLSX"):
         equity_template_df = pd.DataFrame(columns=[
             "URL", "status_code", "Inlinks", "backlinks", "referring_domains_score", "trust_flow_score",
@@ -95,9 +86,8 @@ def main():
     - Offer actionable recommendations for each URL based on their classification.
     """)
 
-    # Update the weights_mapping with new GA4 metrics and adjusted weights
+    # Updated weights_mapping with refined weights for key metrics
     weights_mapping = {
-        # Existing metrics with their weights
         "Inlinks": 4,
         "backlinks": 7,
         "referring_domains_score": 10,
@@ -115,18 +105,12 @@ def main():
         # New GA4 metrics with adjusted weights
         "ga4_sessions": 14,
         "ga4_engaged_sessions": 14,
-        "ga4_conversions": 16,
+        "ga4_conversions": 16,  # Higher weight for conversions
         "ga4_views": 6,
         "ga4_views_per_session": 4,
         "ga4_average_session_duration": 4,
         "ga4_bounce_rate": 2
     }
-
-    columns_to_use = st.multiselect(
-        "Select columns to use in analysis (unselected columns will be omitted):",
-        options=list(weights_mapping.keys()),
-        default=list(weights_mapping.keys())
-    )
 
     uploaded_file = st.file_uploader("Upload your XLSX file", type="xlsx")
 
@@ -154,7 +138,7 @@ def main():
             keyword_columns = ["total_search_volume_score", "number_of_keywords_page_1_score",
                                "number_of_keywords_page_2_score", "number_of_keywords_page_3_score"]
 
-            analysis_cols_to_numeric = [col for col in columns_to_use if col not in keyword_columns]
+            analysis_cols_to_numeric = [col for col in weights_mapping.keys() if col not in keyword_columns]
 
             for col in analysis_cols_to_numeric:
                 if col in equity_data_df.columns:
@@ -188,65 +172,26 @@ def main():
 
             equity_data_df = equity_data_df.fillna(0)
 
-            # Now process and include keyword columns
-            for col in keyword_columns:
-                if col in equity_data_df.columns:
-                    equity_data_df[col] = pd.to_numeric(
-                        equity_data_df[col], errors='coerce'
-                    ).fillna(0)
-                    if col in columns_to_use and col not in analysis_cols_to_numeric:
-                        analysis_cols_to_numeric.append(col)
+            # Apply normalization on metrics
+            norm_data_df = normalize(equity_data_df.copy(), analysis_cols_to_numeric)
 
-            # Implement the hybrid weighting approach
-            # Calculate averages for each metric
-            metric_averages = equity_data_df[analysis_cols_to_numeric].mean()
+            # Apply minimum thresholds for key metrics like conversions, sessions, and GSC clicks
+            def apply_minimum_thresholds(row):
+                if (row['gsc_clicks_score'] == 0 or row['ga4_sessions'] == 0 or row['ga4_conversions'] == 0):
+                    return 'Low'
+                return row['Recommendation']
 
-            weighted_scores_sum = pd.Series(np.zeros(len(equity_data_df)), index=equity_data_df.index)
+            equity_data_df["Recommendation"] = equity_data_df.apply(apply_minimum_thresholds, axis=1)
 
-            for column in analysis_cols_to_numeric:
-                if column in equity_data_df.columns:
-                    base_weight = weights_mapping[column]
-                    average = metric_averages[column]
-                    # Avoid division by zero
-                    average = average if average != 0 else 0.0001
-                    # Adjust weight based on how the URL's metric compares to the average
-                    # Assign full weight if value >= average, partial weight if less
-                    ratio = equity_data_df[column] / average
-                    adjusted_weight = base_weight * np.minimum(ratio, 1)
-                    # Optionally, increase weight if significantly above average (e.g., up to 1.5x)
-                    adjusted_weight += base_weight * np.maximum((ratio - 1) * 0.5, 0)
-                    # Cap the adjusted weight
-                    max_weight = base_weight * 1.5  # Adjust as necessary
-                    adjusted_weight = adjusted_weight.clip(upper=max_weight)
-                    # Normalize the metric
-                    min_val = equity_data_df[column].min()
-                    max_val = equity_data_df[column].max()
-                    if max_val != min_val:
-                        normalized_metric = (equity_data_df[column] - min_val) / (max_val - min_val)
-                    else:
-                        normalized_metric = 0
-                    # Add to the weighted sum
-                    weighted_scores_sum += normalized_metric * adjusted_weight
-
-            # Include the trust ratio if applicable
-            if "trust_flow_score" in columns_to_use and "citation_flow_score" in columns_to_use:
-                if (equity_data_df["citation_flow_score"] != 0).all():
-                    trust_ratio = (equity_data_df["trust_flow_score"] / equity_data_df["citation_flow_score"]).fillna(0) * 2
-                else:
-                    trust_ratio = pd.Series(np.zeros(len(equity_data_df)), index=equity_data_df.index)
-                weighted_scores_sum += trust_ratio
-
-            # Assign the final weighted score
-            equity_data_df["Final_Weighted_Score"] = weighted_scores_sum
-
-            # Proceed with classification as before
+            # Refining classification based on score and thresholds
             high_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.85)
             medium_threshold = equity_data_df["Final_Weighted_Score"].quantile(0.50)
 
-            equity_data_df["Recommendation"] = equity_data_df["Final_Weighted_Score"].apply(
-                lambda x: classify_score(x, high_threshold, medium_threshold)
+            equity_data_df["Recommendation"] = equity_data_df.apply(
+                lambda row: classify_score_v2(row["Final_Weighted_Score"], high_threshold, medium_threshold, row), axis=1
             )
 
+            # Apply action mappings based on the refined recommendations
             action_mapping = {
                 "High": "Keep or Maintain 1:1 redirect",
                 "Medium": "Update or consolidate content",
@@ -256,22 +201,18 @@ def main():
             equity_data_df["Action"] = equity_data_df["Recommendation"].map(action_mapping)
 
             # Prepare the final result dataframe
-            # Exclude 'Final_Weighted_Score' from the export columns if desired
-            export_columns = [col for col in equity_data_df.columns if col != "Final_Weighted_Score"]
-            result_df = equity_data_df[export_columns]
+            result_df = equity_data_df.copy()
 
-            result_df = result_df.fillna(0)
-
-        st.write("Classification Distribution:")
-        st.write(equity_data_df["Recommendation"].value_counts())
-
+        # Display the result dataframe for inspection
         st.write("Detailed URL Table (showing first 100 rows):")
         st.write(result_df.head(100))
 
+        # Allow download of final results
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             result_df.to_excel(writer, index=False, sheet_name='Results')
-        st.markdown(get_excel_download_link(output, "equity_analysis_results.xlsx"), unsafe_allow_html=True)
+        st.markdown(get_excel_download_link(output, "equity_analysis_results_refined.xlsx"), unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
+
